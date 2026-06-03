@@ -13,9 +13,7 @@ from app.schemas.member import (
     MemberStatusUpdate, MemberUpdate, PaginatedMembers,
 )
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
-from models.models import AuditLog, Member, MemberRole, Role, RoleName
+from models import AuditLog, Member, MemberRole, Role, RoleName
 
 router = APIRouter(prefix="/members", tags=["Membres"])
 

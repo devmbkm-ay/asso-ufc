@@ -8,11 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import decode_token
-
-# Importe les modèles depuis la racine du projet
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
-from models.models import Member, MemberRole, Role, RoleName
+from models import Member, MemberRole, Role, RoleName
 
 bearer_scheme = HTTPBearer()
 

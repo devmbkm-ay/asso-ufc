@@ -11,9 +11,7 @@ from app.core.security import (
 )
 from app.schemas.member import LoginRequest, MemberRead, RefreshRequest, TokenResponse
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
-from models.models import Member, MemberRole, Role
+from models import Member, MemberRole, Role
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
