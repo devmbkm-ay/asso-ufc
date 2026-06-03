@@ -1,0 +1,221 @@
+"""
+Association management — SQLAlchemy models
+All tables use UUID primary keys and PostgreSQL-native types.
+"""
+import enum
+import uuid
+from datetime import datetime, date
+
+from sqlalchemy import (
+    Boolean, Column, Date, DateTime, Enum, ForeignKey,
+    Integer, Numeric, String, Text, UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.sql import func
+
+
+# ── Base ─────────────────────────────────────────────────────────────────────
+
+class Base(DeclarativeBase):
+    pass
+
+
+# ── Enums ────────────────────────────────────────────────────────────────────
+
+class MemberStatus(str, enum.Enum):
+    active    = "active"
+    inactive  = "inactive"
+    suspended = "suspended"
+    honorary  = "honorary"
+
+
+class RoleName(str, enum.Enum):
+    super_admin = "super_admin"
+    treasurer   = "treasurer"
+    secretary   = "secretary"
+    member      = "member"
+
+
+class CotisationFrequency(str, enum.Enum):
+    monthly   = "monthly"
+    annual    = "annual"
+    one_time  = "one_time"
+
+
+class PaymentMethod(str, enum.Enum):
+    cash          = "cash"
+    bank_transfer = "bank_transfer"
+    lydia         = "lydia"
+    sumeria       = "sumeria"
+    other         = "other"
+
+
+class PaymentStatus(str, enum.Enum):
+    pending   = "pending"
+    confirmed = "confirmed"
+    cancelled = "cancelled"
+
+
+class EventStatus(str, enum.Enum):
+    draft     = "draft"
+    published = "published"
+    cancelled = "cancelled"
+    completed = "completed"
+
+
+class NotificationType(str, enum.Enum):
+    cotisation_reminder = "cotisation_reminder"
+    event_invitation    = "event_invitation"
+    general             = "general"
+    welcome             = "welcome"
+
+
+# ── Tables ───────────────────────────────────────────────────────────────────
+
+class Member(Base):
+    __tablename__ = "members"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    first_name = Column(String(100), nullable=False)
+    last_name  = Column(String(100), nullable=False)
+    email      = Column(String(255), nullable=False, unique=True, index=True)
+    phone      = Column(String(30))
+    address    = Column(String(500))
+    birth_date = Column(Date)
+    joined_at  = Column(Date, nullable=False, default=date.today)
+    status     = Column(Enum(MemberStatus), nullable=False, default=MemberStatus.active, index=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationships
+    roles         = relationship("MemberRole", back_populates="member", foreign_keys="MemberRole.member_id")
+    payments      = relationship("Payment", back_populates="member", foreign_keys="Payment.member_id")
+    registrations = relationship("EventRegistration", back_populates="member")
+    notifications = relationship("Notification", back_populates="member")
+
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name        = Column(Enum(RoleName), nullable=False, unique=True)
+    description = Column(String(500))
+
+    members = relationship("MemberRole", back_populates="role")
+
+
+class MemberRole(Base):
+    __tablename__ = "member_roles"
+    __table_args__ = (
+        UniqueConstraint("member_id", "role_id", name="uq_member_role"),
+    )
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id   = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_id     = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    assigned_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+
+    member = relationship("Member", back_populates="roles", foreign_keys=[member_id])
+    role   = relationship("Role", back_populates="members")
+
+
+class CotisationPlan(Base):
+    __tablename__ = "cotisation_plans"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    label       = Column(String(200), nullable=False)
+    amount      = Column(Numeric(10, 2), nullable=False)
+    frequency   = Column(Enum(CotisationFrequency), nullable=False, default=CotisationFrequency.annual)
+    valid_from  = Column(Date, nullable=False)
+    valid_until = Column(Date, nullable=True)
+    is_active   = Column(Boolean, nullable=False, default=True, index=True)
+
+    payments = relationship("Payment", back_populates="cotisation_plan")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+    __table_args__ = (
+        UniqueConstraint("member_id", "cotisation_plan_id", "period_month", "period_year",
+                         name="uq_payment_period"),
+    )
+
+    id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id          = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True)
+    cotisation_plan_id = Column(UUID(as_uuid=True), ForeignKey("cotisation_plans.id"), nullable=False)
+    amount             = Column(Numeric(10, 2), nullable=False)
+    payment_date       = Column(Date, nullable=False, default=date.today)
+    period_month       = Column(Integer, nullable=True)   # 1-12, null pour annual/one_time
+    period_year        = Column(Integer, nullable=False)
+    method             = Column(Enum(PaymentMethod), nullable=False, default=PaymentMethod.cash)
+    status             = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.confirmed, index=True)
+    reference          = Column(String(200))
+    recorded_by        = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    notes              = Column(Text)
+
+    member          = relationship("Member", back_populates="payments", foreign_keys=[member_id])
+    cotisation_plan = relationship("CotisationPlan", back_populates="payments")
+
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title        = Column(String(300), nullable=False)
+    description  = Column(Text)
+    event_date   = Column(Date, nullable=False, index=True)
+    location     = Column(String(500))
+    capacity     = Column(Integer)
+    ticket_price = Column(Numeric(10, 2), nullable=False, default=0)
+    status       = Column(Enum(EventStatus), nullable=False, default=EventStatus.draft, index=True)
+    created_by   = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    registrations = relationship("EventRegistration", back_populates="event")
+
+
+class EventRegistration(Base):
+    __tablename__ = "event_registrations"
+    __table_args__ = (
+        UniqueConstraint("event_id", "member_id", name="uq_event_member"),
+    )
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_id      = Column(UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True)
+    member_id     = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True)
+    attended      = Column(Boolean, nullable=False, default=False)
+    amount_paid   = Column(Numeric(10, 2), nullable=False, default=0)
+    registered_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    event  = relationship("Event", back_populates="registrations")
+    member = relationship("Member", back_populates="registrations")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id  = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True)
+    type       = Column(Enum(NotificationType), nullable=False)
+    subject    = Column(String(500), nullable=False)
+    body       = Column(Text, nullable=False)
+    sent       = Column(Boolean, nullable=False, default=False, index=True)
+    sent_at    = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    member = relationship("Member", back_populates="notifications")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    actor_id   = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    action     = Column(String(100), nullable=False)   # ex: "payment.create", "member.update"
+    table_name = Column(String(100), nullable=False)
+    record_id  = Column(UUID(as_uuid=True), nullable=True)
+    diff       = Column(JSONB)                         # {"before": {...}, "after": {...}}
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

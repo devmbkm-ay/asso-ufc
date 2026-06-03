@@ -1,0 +1,41 @@
+services:
+
+  # ── Base de données PostgreSQL ──────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-asso_db}
+      POSTGRES_USER:     ${POSTGRES_USER:-asso_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"          # exposé localement pour inspecter avec DBeaver/TablePlus
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asso_user} -d ${POSTGRES_DB:-asso_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── API FastAPI ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy   # attend que postgres soit prêt
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-asso_user}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-asso_db}
+      SECRET_KEY:   ${SECRET_KEY:-changeme-dev-only}
+      DEBUG:        ${DEBUG:-false}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app                      # hot-reload en dev (retiré en prod)
+
+volumes:
+  postgres_data:
