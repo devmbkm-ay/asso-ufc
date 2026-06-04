@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # CORS — format JSON dans .env : ALLOWED_ORIGINS=["http://localhost:3000","https://asso.fr"]
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # Cron rappels cotisations (jour du mois et heure UTC)
+    REMINDER_DAY:  int = 5
+    REMINDER_HOUR: int = 9
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

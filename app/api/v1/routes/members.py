@@ -8,12 +8,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequireAdmin, RequireSecretary
 from app.core.security import hash_password
+from app.core import email as email_svc
 from app.schemas.member import (
     MemberCreate, MemberListItem, MemberRead,
     MemberStatusUpdate, MemberUpdate, PaginatedMembers,
 )
 
-from models import AuditLog, Member, MemberRole, Role, RoleName
+from models import AuditLog, Member, MemberRole, Notification, NotificationType, Role, RoleName
 
 router = APIRouter(prefix="/members", tags=["Membres"])
 
@@ -143,6 +144,21 @@ def create_member(
 
     db.commit()
     db.refresh(new_member)
+
+    # Email de bienvenue — non bloquant si Brevo non configuré
+    from datetime import datetime, timezone
+    ok = email_svc.send_welcome(new_member.email, new_member.first_name)
+    db.add(Notification(
+        id=uuid4(),
+        member_id=new_member.id,
+        type=NotificationType.welcome,
+        subject="Bienvenue dans l'association !",
+        body="",
+        sent=ok,
+        sent_at=datetime.now(tz=timezone.utc) if ok else None,
+    ))
+    db.commit()
+
     return _member_to_read(new_member, _get_roles(db, new_member.id))
 
 
