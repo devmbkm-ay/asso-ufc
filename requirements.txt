@@ -8,3 +8,7 @@ passlib[bcrypt]>=1.7.4
 python-multipart>=0.0.9
 pydantic[email]>=2.7.0
 pydantic-settings>=2.3.0
+
+# Tests
+pytest>=8.0.0
+httpx>=0.27.0

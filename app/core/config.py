@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import EmailStr
 
 
@@ -22,12 +22,14 @@ class Settings(BaseSettings):
     EMAIL_FROM: EmailStr = "noreply@asso.fr"
     EMAIL_FROM_NAME: str = "Association"
 
-    # CORS
+    # CORS — format JSON dans .env : ALLOWED_ORIGINS=["http://localhost:3000","https://asso.fr"]
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
 
 settings = Settings()
