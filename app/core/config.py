@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     EMAIL_FROM_NAME: str = "Association"
 
     # CORS — format JSON dans .env : ALLOWED_ORIGINS=["http://localhost:3000","https://asso.fr"]
-    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "https://asso-ufc-frontend.vercel.app"]
 
     # Cron rappels cotisations (jour du mois et heure UTC)
     REMINDER_DAY:  int = 5
