@@ -18,10 +18,15 @@ from sqlalchemy.sql import func
 # ── Base ─────────────────────────────────────────────────────────────────────
 
 class Base(DeclarativeBase):
+    # Classe parente de tous les modèles — SQLAlchemy en a besoin pour
+    # générer les tables PostgreSQL automatiquement via Alembic.
     pass
 
 
 # ── Enums ────────────────────────────────────────────────────────────────────
+# Un Enum définit une liste fermée de valeurs autorisées pour un champ.
+# "str, enum.Enum" signifie que les valeurs sont aussi des chaînes Python
+# normales, ce qui simplifie la sérialisation JSON.
 
 class MemberStatus(str, enum.Enum):
     active    = "active"
@@ -72,6 +77,13 @@ class NotificationType(str, enum.Enum):
 
 
 # ── Tables ───────────────────────────────────────────────────────────────────
+# Chaque classe représente une table en base de données.
+# Column(type, ...) décrit une colonne :
+#   nullable=False → valeur obligatoire
+#   unique=True    → deux lignes ne peuvent pas avoir la même valeur
+#   index=True     → crée un index pour accélérer les recherches
+#   default=...    → valeur par défaut si non fournie
+# ForeignKey("table.colonne") crée une clé étrangère (lien entre tables).
 
 class Member(Base):
     __tablename__ = "members"
@@ -85,11 +97,15 @@ class Member(Base):
     birth_date = Column(Date)
     joined_at  = Column(Date, nullable=False, default=date.today)
     status     = Column(Enum(MemberStatus), nullable=False, default=MemberStatus.active, index=True)
+    # Auto-référence : qui a créé ce membre (un autre membre de l'asso)
     created_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # onupdate=func.now() : mis à jour automatiquement à chaque modification
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationships
+    # Les relationships permettent d'accéder aux objets liés via Python
+    # (ex: member.payments retourne tous les paiements de ce membre)
+    # sans écrire de JOIN SQL manuellement.
     roles         = relationship("MemberRole", back_populates="member", foreign_keys="MemberRole.member_id")
     payments      = relationship("Payment", back_populates="member", foreign_keys="Payment.member_id")
     registrations = relationship("EventRegistration", back_populates="member")
@@ -107,12 +123,18 @@ class Role(Base):
 
 
 class MemberRole(Base):
+    # Table de liaison entre Member et Role (relation many-to-many).
+    # Un membre peut avoir plusieurs rôles, un rôle peut être attribué
+    # à plusieurs membres.
     __tablename__ = "member_roles"
     __table_args__ = (
+        # Contrainte d'unicité : un même rôle ne peut pas être attribué
+        # deux fois au même membre.
         UniqueConstraint("member_id", "role_id", name="uq_member_role"),
     )
 
     id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # ondelete="CASCADE" : si le membre est supprimé, ses rôles le sont aussi
     member_id   = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True)
     role_id     = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -127,6 +149,7 @@ class CotisationPlan(Base):
 
     id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     label       = Column(String(200), nullable=False)
+    # Numeric(10, 2) : nombre décimal avec 10 chiffres au total et 2 après la virgule
     amount      = Column(Numeric(10, 2), nullable=False)
     frequency   = Column(Enum(CotisationFrequency), nullable=False, default=CotisationFrequency.annual)
     valid_from  = Column(Date, nullable=False)
@@ -139,6 +162,8 @@ class CotisationPlan(Base):
 class Payment(Base):
     __tablename__ = "payments"
     __table_args__ = (
+        # Empêche de saisir deux paiements pour le même membre,
+        # le même plan, le même mois et la même année.
         UniqueConstraint("member_id", "cotisation_plan_id", "period_month", "period_year",
                          name="uq_payment_period"),
     )
@@ -180,6 +205,7 @@ class Event(Base):
 class EventRegistration(Base):
     __tablename__ = "event_registrations"
     __table_args__ = (
+        # Un membre ne peut s'inscrire qu'une seule fois par événement.
         UniqueConstraint("event_id", "member_id", name="uq_event_member"),
     )
 
@@ -210,6 +236,7 @@ class Notification(Base):
 
 
 class AuditLog(Base):
+    # Journal immuable — on n'y écrit, jamais on ne modifie ni supprime.
     __tablename__ = "audit_logs"
 
     id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

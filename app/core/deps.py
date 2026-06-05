@@ -10,6 +10,8 @@ from app.core.database import get_db
 from app.core.security import decode_token
 from models import Member, MemberRole, Role, RoleName
 
+# HTTPBearer extrait automatiquement le token du header HTTP:
+# "Authorization: Bearer <token>"
 bearer_scheme = HTTPBearer()
 
 
@@ -41,6 +43,7 @@ def get_current_member(
     member = db.query(Member).filter(Member.id == UUID(member_id)).first()
     if not member:
         raise credentials_exception
+    # Bloque les comptes suspendus même avec un token encore valide
     if member.status == "suspended":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -49,6 +52,8 @@ def get_current_member(
     return member
 
 
+# CurrentMember est un raccourci de type : dans une signature de route,
+# "current_member: CurrentMember" injecte le membre connecté automatiquement.
 CurrentMember = Annotated[Member, Depends(get_current_member)]
 
 
@@ -63,6 +68,8 @@ def require_roles(*role_names: RoleName):
             _: Member = Depends(require_roles(RoleName.super_admin, RoleName.treasurer))
         ): ...
     """
+    # _check est la vraie fonction de dépendance, créée à la volée avec
+    # les rôles autorisés capturés dans la closure.
     def _check(
         current_member: CurrentMember,
         db: Session = Depends(get_db),
@@ -74,6 +81,7 @@ def require_roles(*role_names: RoleName):
             .all()
         )
         assigned = {r.name for r in member_roles}
+        # intersection : vérifie si au moins un des rôles requis est présent
         if not assigned.intersection(set(role_names)):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -84,7 +92,8 @@ def require_roles(*role_names: RoleName):
     return _check
 
 
-# Alias pratiques
+# Alias prêts à l'emploi — ajoutés comme paramètre de route avec "_=RequireAdmin"
+# FastAPI les résout avant d'exécuter la route, bloquant si le rôle est absent.
 RequireAdmin     = Depends(require_roles(RoleName.super_admin))
 RequireTreasurer = Depends(require_roles(RoleName.super_admin, RoleName.treasurer))
 RequireSecretary = Depends(require_roles(RoleName.super_admin, RoleName.secretary))

@@ -1,17 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError
 from sqlalchemy.orm import Session
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.core.database import get_db
 from app.core.deps import CurrentMember
 from app.core.security import (
     create_access_token, create_refresh_token,
-    decode_token, verify_password,
+    decode_token, hash_password, verify_password,
 )
-from app.schemas.member import LoginRequest, MemberRead, RefreshRequest, TokenResponse
+from app.schemas.member import LoginRequest, MemberCreate, MemberRead, RefreshRequest, TokenResponse
 
-from models import Member, MemberRole, Role
+from models import Member, MemberRole, Role, RoleName
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -78,3 +78,34 @@ def get_me(current_member: CurrentMember, db: Session = Depends(get_db)):
     result = MemberRead.model_validate(current_member)
     result.roles = roles
     return result
+
+
+@router.post("/setup", summary="Créer le premier super-admin (désactivé dès qu'un membre existe)")
+def setup_first_admin(payload: MemberCreate, db: Session = Depends(get_db)):
+    if db.query(Member).count() > 0:
+        raise HTTPException(status_code=403, detail="Setup déjà effectué")
+
+    member_id = uuid4()
+    new_member = Member(
+        id=member_id,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        email=payload.email,
+        phone=payload.phone,
+        password_hash=hash_password(payload.password),
+        created_by=member_id,
+    )
+    db.add(new_member)
+    db.flush()
+
+    admin_role = db.query(Role).filter(Role.name == RoleName.super_admin).first()
+    if admin_role:
+        db.add(MemberRole(
+            id=uuid4(),
+            member_id=new_member.id,
+            role_id=admin_role.id,
+            assigned_by=new_member.id,
+        ))
+
+    db.commit()
+    return {"message": "Super-admin créé"}

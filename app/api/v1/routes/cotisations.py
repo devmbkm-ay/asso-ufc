@@ -87,6 +87,9 @@ def update_plan(
     plan = db.query(CotisationPlan).filter(CotisationPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan introuvable")
+    # model_dump(exclude_unset=True) : ne retourne que les champs réellement
+    # fournis dans la requête PATCH — les champs absents ne sont pas écrasés.
+    # setattr(obj, "champ", valeur) est l'équivalent Python de obj.champ = valeur
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(plan, field, value)
     db.commit()
