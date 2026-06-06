@@ -3,6 +3,7 @@ from typing import Annotated, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -43,9 +44,12 @@ def _audit(db: Session, actor_id: UUID, action: str, record_id: UUID, diff: dict
 
 
 def _member_to_read(member: Member, roles: list[str]) -> MemberRead:
-    obj = MemberRead.model_validate(member)
-    obj.roles = roles
-    return obj
+    cols = {
+        attr.key: getattr(member, attr.key)
+        for attr in sa_inspect(member.__class__).mapper.column_attrs
+    }
+    cols["roles"] = roles
+    return MemberRead.model_validate(cols)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

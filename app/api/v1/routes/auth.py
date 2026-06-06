@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 from uuid import UUID, uuid4
 
@@ -14,6 +15,17 @@ from app.schemas.member import LoginRequest, MemberCreate, MemberRead, RefreshRe
 from models import Member, MemberRole, Role, RoleName
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+def _member_to_read(member: Member, roles: list[str]) -> MemberRead:
+    # Lit uniquement les colonnes SQL (pas les relations ORM comme `roles`)
+    # pour éviter la collision de noms avec MemberRead.roles: list[str].
+    cols = {
+        attr.key: getattr(member, attr.key)
+        for attr in sa_inspect(member.__class__).mapper.column_attrs
+    }
+    cols["roles"] = roles
+    return MemberRead.model_validate(cols)
 
 
 def _get_member_roles(db: Session, member_id: UUID) -> list[str]:
@@ -75,9 +87,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=MemberRead, summary="Profil courant")
 def get_me(current_member: CurrentMember, db: Session = Depends(get_db)):
     roles = _get_member_roles(db, current_member.id)
-    result = MemberRead.model_validate(current_member)
-    result.roles = roles
-    return result
+    return _member_to_read(current_member, roles)
 
 
 @router.post("/setup", summary="Créer le premier super-admin (désactivé dès qu'un membre existe)")
