@@ -49,12 +49,23 @@ def health():
     return {"status": "ok", "version": settings.APP_VERSION}
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # ── Gestion globale des erreurs ───────────────────────────────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    # Intercepte toute exception non gérée pour éviter de renvoyer un
-    # traceback Python brut (qui pourrait exposer des détails sensibles).
+    logger.exception("Unhandled exception on %s %s", request.method, request.url)
+    # On ajoute manuellement les headers CORS car quand une exception non
+    # gérée remonte jusqu'ici, le CORSMiddleware ne peut plus les injecter.
+    origin = request.headers.get("origin", "")
+    cors_headers = {}
+    if origin in settings.ALLOWED_ORIGINS:
+        cors_headers["Access-Control-Allow-Origin"] = origin
+        cors_headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=500,
         content={"detail": "Erreur interne du serveur"},
+        headers=cors_headers,
     )
