@@ -1,12 +1,16 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.tasks import start_scheduler, stop_scheduler
 from app.api.v1 import api_router
+
+UPLOAD_DIR = Path("/app/uploads")
 
 
 @asynccontextmanager
@@ -40,6 +44,10 @@ app.add_middleware(
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 app.include_router(api_router)
+
+# ── Fichiers statiques (photos uploadées) ─────────────────────────────────────
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 
 @app.get("/health", tags=["System"])

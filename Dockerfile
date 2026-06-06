@@ -30,6 +30,7 @@ COPY . .
 
 # Utilisateur non-root pour la sécurité
 RUN adduser --disabled-password --gecos "" appuser \
+    && mkdir -p /app/uploads \
     && chown -R appuser:appuser /app
 USER appuser
 

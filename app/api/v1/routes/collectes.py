@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequireAdmin, RequireSecretary
 from app.schemas.collecte import (
-    CollecteCreate, CollecteRead, ContributionCreate, ContributionRead,
+    CollecteCreate, CollecteUpdate, CollecteRead, ContributionCreate, ContributionRead,
 )
 from models import Collecte, Contribution, Member
 
@@ -201,6 +201,30 @@ def list_contributions(
         )
         for c, m in rows
     ]
+
+
+@router.patch(
+    "/{collecte_id}", response_model=CollecteRead,
+    summary="Modifier une collecte",
+)
+def update_collecte(
+    collecte_id: UUID,
+    payload: CollecteUpdate,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+    _=RequireSecretary,
+):
+    """Rôles requis : super_admin, secretary."""
+    collecte = db.query(Collecte).filter(Collecte.id == collecte_id).first()
+    if not collecte:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collecte introuvable")
+
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(collecte, field, value)
+
+    db.commit()
+    db.refresh(collecte)
+    return _collecte_to_read(collecte, db)
 
 
 @router.patch(

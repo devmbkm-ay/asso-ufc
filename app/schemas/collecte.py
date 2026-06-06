@@ -15,6 +15,14 @@ class CollecteCreate(BaseModel):
     start_date:       date
 
 
+class CollecteUpdate(BaseModel):
+    title:            Optional[str]     = Field(None, min_length=1, max_length=300)
+    beneficiary_name: Optional[str]     = Field(None, min_length=1, max_length=200)
+    photo_url:        Optional[str]     = Field(None, max_length=500)
+    description:      Optional[str]     = None
+    min_amount:       Optional[Decimal] = Field(None, ge=1)
+
+
 class ContributionCreate(BaseModel):
     amount: Decimal = Field(..., gt=0)
 
