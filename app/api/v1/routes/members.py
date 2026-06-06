@@ -91,9 +91,12 @@ def list_members(
 
     items = []
     for m in members:
-        item = MemberListItem.model_validate(m)
-        item.roles = _get_roles(db, m.id)
-        items.append(item)
+        cols = {
+            attr.key: getattr(m, attr.key)
+            for attr in sa_inspect(m.__class__).mapper.column_attrs
+        }
+        cols["roles"] = _get_roles(db, m.id)
+        items.append(MemberListItem.model_validate(cols))
 
     return PaginatedMembers(
         items=items,
