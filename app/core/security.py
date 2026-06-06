@@ -2,29 +2,27 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
+import bcrypt as _bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
+
+# ── Passwords ─────────────────────────────────────────────────────────────────
 # bcrypt est un algorithme de hachage à sens unique conçu pour être lent
 # (contrairement à MD5/SHA), ce qui rend les attaques par force brute peu
 # pratiques même si la base de données est compromise.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-# ── Passwords ─────────────────────────────────────────────────────────────────
+# On utilise bcrypt directement (sans passlib) pour éviter les conflits
+# de versions liés au check interne detect_wrap_bug de passlib.
 
 def hash_password(plain: str) -> str:
-    # Transforme le mot de passe en une chaîne illisible stockée en BDD.
-    # Chaque appel produit un résultat différent (salt aléatoire inclus).
-    return pwd_context.hash(plain)
+    # Chaque appel produit un résultat différent grâce au salt aléatoire inclus.
+    return _bcrypt.hashpw(plain.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    # Compare le mot de passe saisi avec le hash stocké sans jamais
-    # "déchiffrer" — bcrypt re-hache et compare les deux résultats.
-    return pwd_context.verify(plain, hashed)
+    # Compare le mot de passe saisi avec le hash stocké sans jamais "déchiffrer".
+    return _bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
 # ── Tokens JWT ────────────────────────────────────────────────────────────────
