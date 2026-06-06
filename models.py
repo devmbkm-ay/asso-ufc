@@ -247,3 +247,37 @@ class AuditLog(Base):
     record_id  = Column(UUID(as_uuid=True), nullable=True)
     diff       = Column(JSONB)                         # {"before": {...}, "after": {...}}
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Collecte(Base):
+    # Collecte de solidarité déclenchée au décès d'un proche d'un membre.
+    __tablename__ = "collectes"
+
+    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title            = Column(String(300), nullable=False)
+    beneficiary_name = Column(String(200), nullable=False)
+    photo_url        = Column(String(500))
+    description      = Column(Text)
+    min_amount       = Column(Numeric(10, 2), nullable=False, default=20.00)
+    start_date       = Column(Date, nullable=False)
+    # end_date = start_date + 14 jours, calculé à la création
+    end_date         = Column(Date, nullable=False)
+    is_closed        = Column(Boolean, nullable=False, default=False)
+    created_by       = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    created_at       = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    contributions = relationship("Contribution", back_populates="collecte")
+
+
+class Contribution(Base):
+    # Participation d'un membre à une collecte de solidarité.
+    __tablename__ = "contributions"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    collecte_id    = Column(UUID(as_uuid=True), ForeignKey("collectes.id", ondelete="CASCADE"), nullable=False, index=True)
+    member_id      = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount         = Column(Numeric(10, 2), nullable=False)
+    contributed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    collecte = relationship("Collecte", back_populates="contributions")
+    member   = relationship("Member")
