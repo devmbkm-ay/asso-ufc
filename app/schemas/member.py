@@ -1,8 +1,8 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -65,6 +65,17 @@ class MemberRead(MemberBase):
     roles:      list[str] = []
 
     model_config = {"from_attributes": True, "use_enum_values": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _clear_orm_roles(cls, data: Any) -> Any:
+        # Quand Pydantic lit un objet SQLAlchemy, member.roles retourne la
+        # relation ORM (list[MemberRole]) au lieu de list[str]. On l'efface
+        # via __dict__ pour éviter le lazy-load et utiliser le défaut [].
+        # Les appelants assignent ensuite roles manuellement.
+        if hasattr(data, "__tablename__"):
+            data.__dict__.pop("roles", None)
+        return data
 
 
 class MemberListItem(BaseModel):
