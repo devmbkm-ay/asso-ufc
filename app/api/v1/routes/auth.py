@@ -75,7 +75,7 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=MemberRead, summary="Profil courant")
 def get_me(current_member: CurrentMember, db: Session = Depends(get_db)):
     roles = _get_member_roles(db, current_member.id)
-    result = MemberRead.model_validate(current_member, use_enum_values=True)
+    result = MemberRead.model_validate(current_member)
     result.roles = roles
     return result
 
