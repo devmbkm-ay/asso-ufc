@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import List
 from uuid import UUID, uuid4
@@ -54,6 +54,9 @@ def _collecte_to_read(collecte: Collecte, db: Session) -> CollecteRead:
         end_date=collecte.end_date,
         is_closed=collecte.is_closed,
         is_active=is_active,
+        is_archived=collecte.is_archived,
+        archived_at=collecte.archived_at,
+        category=collecte.category,
         status=status,
         total_collected=total,
         contributors_count=count,
@@ -83,6 +86,7 @@ def create_collecte(
         min_amount=payload.min_amount,
         start_date=payload.start_date,
         end_date=payload.start_date + timedelta(days=DURATION_DAYS),
+        category=payload.category,
         created_by=current_member.id,
     )
     db.add(collecte)
@@ -99,12 +103,16 @@ def list_collectes(
     current_member: CurrentMember,
     db: Session = Depends(get_db),
     active_only: bool = False,
+    include_archived: bool = False,
 ):
-    """Retourne toutes les collectes, les actives en premier."""
-    query = db.query(Collecte).order_by(Collecte.created_at.desc())
-    collectes = query.all()
+    """Retourne toutes les collectes. Par défaut exclut les archivées."""
+    query = db.query(Collecte)
+    if not include_archived:
+        query = query.filter(Collecte.is_archived == False)  # noqa: E712
+    query = query.order_by(Collecte.created_at.desc())
+    rows = query.all()
 
-    result = [_collecte_to_read(c, db) for c in collectes]
+    result = [_collecte_to_read(c, db) for c in rows]
     if active_only:
         result = [c for c in result if c.is_active]
     return result
@@ -231,6 +239,30 @@ def update_collecte(
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(collecte, field, value)
 
+    db.commit()
+    db.refresh(collecte)
+    return _collecte_to_read(collecte, db)
+
+
+@router.patch(
+    "/{collecte_id}/archive", response_model=CollecteRead,
+    summary="Archiver une collecte",
+)
+def archive_collecte(
+    collecte_id: UUID,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+    _=RequireAdmin,
+):
+    """Rôle requis : super_admin. Archive la collecte (exclue de la liste principale)."""
+    collecte = db.query(Collecte).filter(Collecte.id == collecte_id).first()
+    if not collecte:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collecte introuvable")
+    if collecte.is_archived:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Collecte déjà archivée")
+
+    collecte.is_archived = True
+    collecte.archived_at = datetime.utcnow()
     db.commit()
     db.refresh(collecte)
     return _collecte_to_read(collecte, db)

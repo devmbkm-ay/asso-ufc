@@ -263,6 +263,9 @@ class Collecte(Base):
     # end_date = start_date + 14 jours, calculé à la création
     end_date         = Column(Date, nullable=False)
     is_closed        = Column(Boolean, nullable=False, default=False)
+    is_archived      = Column(Boolean, nullable=False, default=False)
+    archived_at      = Column(DateTime(timezone=True), nullable=True)
+    category         = Column(String(50), nullable=True)  # deces|mariage|naissance|maladie|autre
     created_by       = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
     created_at       = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
