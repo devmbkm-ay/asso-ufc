@@ -88,17 +88,18 @@ class NotificationType(str, enum.Enum):
 class Member(Base):
     __tablename__ = "members"
 
-    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    first_name = Column(String(100), nullable=False)
-    last_name  = Column(String(100), nullable=False)
-    email      = Column(String(255), nullable=False, unique=True, index=True)
-    phone      = Column(String(30))
-    address    = Column(String(500))
-    birth_date = Column(Date)
-    joined_at  = Column(Date, nullable=False, default=date.today)
-    status     = Column(Enum(MemberStatus), nullable=False, default=MemberStatus.active, index=True)
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    first_name    = Column(String(100), nullable=False)
+    last_name     = Column(String(100), nullable=False)
+    email         = Column(String(255), nullable=False, unique=True, index=True)
+    password_hash = Column(String(255), nullable=False)
+    phone         = Column(String(30))
+    address       = Column(String(500))
+    birth_date    = Column(Date)
+    joined_at     = Column(Date, nullable=False, default=date.today)
+    status        = Column(Enum(MemberStatus), nullable=False, default=MemberStatus.active, index=True)
     # Auto-référence : qui a créé ce membre (un autre membre de l'asso)
-    created_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    created_by    = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     # onupdate=func.now() : mis à jour automatiquement à chaque modification
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
