@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ class MemberRead(MemberBase):
     updated_at: datetime
     roles:      list[str] = []
 
-    model_config = {"from_attributes": True, "use_enum_values": True}
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
 
 class MemberListItem(BaseModel):
