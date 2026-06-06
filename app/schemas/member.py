@@ -79,6 +79,10 @@ class MemberListItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RoleAssign(BaseModel):
+    role_name: str = Field(..., pattern="^(super_admin|treasurer|secretary|member)$")
+
+
 class PaginatedMembers(BaseModel):
     items: list[MemberListItem]
     total: int

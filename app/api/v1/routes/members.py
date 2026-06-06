@@ -12,7 +12,7 @@ from app.core.security import hash_password
 from app.core import email as email_svc
 from app.schemas.member import (
     MemberCreate, MemberListItem, MemberRead,
-    MemberStatusUpdate, MemberUpdate, PaginatedMembers,
+    MemberStatusUpdate, MemberUpdate, PaginatedMembers, RoleAssign,
 )
 
 from models import AuditLog, Member, MemberRole, Notification, NotificationType, Role, RoleName
@@ -247,6 +247,75 @@ def update_member_status(
            {"before": {"status": before_status}, "after": {"status": payload.status}})
     db.commit()
     db.refresh(member)
+    return _member_to_read(member, _get_roles(db, member.id))
+
+
+@router.post("/{member_id}/roles", response_model=MemberRead,
+             status_code=status.HTTP_201_CREATED,
+             summary="Attribuer un rôle à un membre")
+def assign_role(
+    member_id: UUID,
+    payload: RoleAssign,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+    _=RequireAdmin,
+):
+    """Rôle requis : super_admin."""
+    member = db.query(Member).filter(Member.id == member_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+
+    role = db.query(Role).filter(Role.name == payload.role_name).first()
+    if not role:
+        raise HTTPException(status_code=400, detail="Rôle invalide")
+
+    existing = db.query(MemberRole).filter(
+        MemberRole.member_id == member_id,
+        MemberRole.role_id == role.id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Ce rôle est déjà attribué")
+
+    db.add(MemberRole(
+        id=uuid4(),
+        member_id=member_id,
+        role_id=role.id,
+        assigned_by=current_member.id,
+    ))
+    _audit(db, current_member.id, "member.role_assign", member_id, {"role": payload.role_name})
+    db.commit()
+    db.refresh(member)
+    return _member_to_read(member, _get_roles(db, member.id))
+
+
+@router.delete("/{member_id}/roles/{role_name}", response_model=MemberRead,
+               summary="Révoquer un rôle d'un membre")
+def revoke_role(
+    member_id: UUID,
+    role_name: str,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+    _=RequireAdmin,
+):
+    """Rôle requis : super_admin."""
+    member = db.query(Member).filter(Member.id == member_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+
+    role = db.query(Role).filter(Role.name == role_name).first()
+    if not role:
+        raise HTTPException(status_code=400, detail="Rôle invalide")
+
+    member_role = db.query(MemberRole).filter(
+        MemberRole.member_id == member_id,
+        MemberRole.role_id == role.id,
+    ).first()
+    if not member_role:
+        raise HTTPException(status_code=404, detail="Ce rôle n'est pas attribué à ce membre")
+
+    db.delete(member_role)
+    _audit(db, current_member.id, "member.role_revoke", member_id, {"role": role_name})
+    db.commit()
     return _member_to_read(member, _get_roles(db, member.id))
 
 

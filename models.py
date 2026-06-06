@@ -138,6 +138,7 @@ class MemberRole(Base):
     # ondelete="CASCADE" : si le membre est supprimé, ses rôles le sont aussi
     member_id   = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True)
     role_id     = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    assigned_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     assigned_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
 
