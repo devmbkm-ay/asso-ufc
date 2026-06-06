@@ -64,7 +64,7 @@ class MemberRead(MemberBase):
     updated_at: datetime
     roles:      list[str] = []
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "use_enum_values": True}
 
 
 class MemberListItem(BaseModel):
