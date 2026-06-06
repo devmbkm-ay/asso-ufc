@@ -23,10 +23,18 @@ DURATION_DAYS = 14
 
 def _collecte_to_read(collecte: Collecte, db: Session) -> CollecteRead:
     today = date.today()
-    is_active = (
-        not collecte.is_closed
-        and collecte.start_date <= today <= collecte.end_date
-    )
+
+    if collecte.is_closed:
+        status = "closed"
+    elif today < collecte.start_date:
+        status = "upcoming"
+    elif today <= collecte.end_date:
+        status = "active"
+    else:
+        status = "expired"
+
+    is_active = status == "active"
+
     total = db.query(
         func.coalesce(func.sum(Contribution.amount), Decimal("0"))
     ).filter(Contribution.collecte_id == collecte.id).scalar()
@@ -46,6 +54,7 @@ def _collecte_to_read(collecte: Collecte, db: Session) -> CollecteRead:
         end_date=collecte.end_date,
         is_closed=collecte.is_closed,
         is_active=is_active,
+        status=status,
         total_collected=total,
         contributors_count=count,
         created_at=collecte.created_at,

@@ -38,6 +38,8 @@ class CollecteRead(BaseModel):
     end_date:          date
     is_closed:         bool
     is_active:         bool
+    # 'upcoming' | 'active' | 'expired' | 'closed'
+    status:            str
     total_collected:   Decimal
     contributors_count: int
     created_at:        datetime
