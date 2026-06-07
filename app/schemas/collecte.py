@@ -28,7 +28,8 @@ class CollecteUpdate(BaseModel):
 
 
 class ContributionCreate(BaseModel):
-    amount: Decimal = Field(..., gt=0)
+    amount:       Decimal = Field(..., gt=0)
+    is_anonymous: bool    = False
 
 
 class CollecteRead(BaseModel):
@@ -58,4 +59,5 @@ class ContributionRead(BaseModel):
     member_id:      UUID
     member_name:    str
     amount:         Decimal
+    is_anonymous:   bool
     contributed_at: datetime

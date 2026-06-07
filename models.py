@@ -281,6 +281,7 @@ class Contribution(Base):
     collecte_id    = Column(UUID(as_uuid=True), ForeignKey("collectes.id", ondelete="CASCADE"), nullable=False, index=True)
     member_id      = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True)
     amount         = Column(Numeric(10, 2), nullable=False)
+    is_anonymous   = Column(Boolean, nullable=False, default=False)
     contributed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     collecte = relationship("Collecte", back_populates="contributions")

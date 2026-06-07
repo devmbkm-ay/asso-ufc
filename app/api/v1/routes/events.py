@@ -137,6 +137,34 @@ def cancel_event(
 
 # ── Inscriptions ──────────────────────────────────────────────────────────────
 
+@router.get("/events/my-registrations", response_model=list[RegistrationRead],
+            summary="Mes inscriptions à des événements")
+def my_registrations(
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+):
+    regs = (
+        db.query(EventRegistration)
+        .filter(EventRegistration.member_id == current_member.id)
+        .all()
+    )
+    return [_reg_to_read(r) for r in regs]
+
+
+@router.get("/events/{event_id}/my-registration", response_model=Optional[RegistrationRead],
+            summary="Mon inscription à un événement")
+def my_registration(
+    event_id: UUID,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+):
+    reg = db.query(EventRegistration).filter(
+        EventRegistration.event_id == event_id,
+        EventRegistration.member_id == current_member.id,
+    ).first()
+    return _reg_to_read(reg) if reg else None
+
+
 @router.post("/events/{event_id}/registrations", response_model=RegistrationRead,
              status_code=status.HTTP_201_CREATED,
              summary="Inscrire un membre à un événement")
@@ -174,6 +202,27 @@ def register_member(
     db.commit()
     db.refresh(reg)
     return _reg_to_read(reg)
+
+
+@router.delete("/events/{event_id}/registrations/{registration_id}",
+               status_code=status.HTTP_204_NO_CONTENT,
+               summary="Se désinscrire d'un événement")
+def unregister(
+    event_id: UUID,
+    registration_id: UUID,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+):
+    """Un membre peut se désinscrire de sa propre inscription."""
+    reg = db.query(EventRegistration).filter(
+        EventRegistration.id == registration_id,
+        EventRegistration.event_id == event_id,
+        EventRegistration.member_id == current_member.id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    db.delete(reg)
+    db.commit()
 
 
 @router.get("/events/{event_id}/registrations", response_model=list[RegistrationRead],

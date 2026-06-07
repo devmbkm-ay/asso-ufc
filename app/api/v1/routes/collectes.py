@@ -171,6 +171,7 @@ def contribute(
         collecte_id=collecte_id,
         member_id=current_member.id,
         amount=payload.amount,
+        is_anonymous=payload.is_anonymous,
     )
     db.add(contribution)
     db.commit()
@@ -180,8 +181,9 @@ def contribute(
         id=contribution.id,
         collecte_id=contribution.collecte_id,
         member_id=contribution.member_id,
-        member_name=f"{current_member.first_name} {current_member.last_name}",
+        member_name="Membre anonyme" if payload.is_anonymous else f"{current_member.first_name} {current_member.last_name}",
         amount=contribution.amount,
+        is_anonymous=contribution.is_anonymous,
         contributed_at=contribution.contributed_at,
     )
 
@@ -203,7 +205,7 @@ def list_contributions(
         db.query(Contribution, Member)
         .join(Member, Member.id == Contribution.member_id)
         .filter(Contribution.collecte_id == collecte_id)
-        .order_by(Contribution.contributed_at.desc())
+        .order_by(Contribution.contributed_at.asc())
         .all()
     )
 
@@ -212,8 +214,9 @@ def list_contributions(
             id=c.id,
             collecte_id=c.collecte_id,
             member_id=c.member_id,
-            member_name=f"{m.first_name} {m.last_name}",
+            member_name="Membre anonyme" if c.is_anonymous else f"{m.first_name} {m.last_name}",
             amount=c.amount,
+            is_anonymous=c.is_anonymous,
             contributed_at=c.contributed_at,
         )
         for c, m in rows
