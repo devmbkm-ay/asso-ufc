@@ -126,6 +126,23 @@ def create_plan(
     return plan
 
 
+@router.post("/cotisation-plans/{plan_id}/init-payments",
+             status_code=status.HTTP_200_OK,
+             summary="Initialiser les cotisations en attente pour tous les membres")
+def init_plan_payments(
+    plan_id: UUID,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+    _=RequireTreasurer,
+):
+    plan = db.query(CotisationPlan).filter(CotisationPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan introuvable")
+    _init_payments_for_plan(plan, db)
+    db.commit()
+    return {"detail": "Cotisations initialisées"}
+
+
 @router.patch("/cotisation-plans/{plan_id}", response_model=CotisationPlanRead,
               summary="Modifier un plan")
 def update_plan(
