@@ -205,7 +205,7 @@ def list_payments(
     current_member: CurrentMember,
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(20, ge=1, le=500),
     member_id: Optional[UUID] = None,
     year: Optional[int] = None,
     month: Optional[int] = Query(None, ge=1, le=12),

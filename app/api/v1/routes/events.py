@@ -93,6 +93,25 @@ def create_event(
     return _event_to_read(event)
 
 
+# ── Inscriptions ──────────────────────────────────────────────────────────────
+# IMPORTANT: routes statiques (/my-registrations) déclarées AVANT les routes
+# paramétrées (/{event_id: UUID}) pour éviter que FastAPI tente de parser
+# "my-registrations" comme un UUID → 422.
+
+@router.get("/events/my-registrations", response_model=list[RegistrationRead],
+            summary="Mes inscriptions à des événements")
+def my_registrations(
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+):
+    regs = (
+        db.query(EventRegistration)
+        .filter(EventRegistration.member_id == current_member.id)
+        .all()
+    )
+    return [_reg_to_read(r) for r in regs]
+
+
 @router.get("/events/{event_id}", response_model=EventRead,
             summary="Détail d'un événement")
 def get_event(
@@ -133,22 +152,6 @@ def cancel_event(
     event = _get_event_or_404(event_id, db)
     event.status = EventStatus.cancelled
     db.commit()
-
-
-# ── Inscriptions ──────────────────────────────────────────────────────────────
-
-@router.get("/events/my-registrations", response_model=list[RegistrationRead],
-            summary="Mes inscriptions à des événements")
-def my_registrations(
-    current_member: CurrentMember,
-    db: Session = Depends(get_db),
-):
-    regs = (
-        db.query(EventRegistration)
-        .filter(EventRegistration.member_id == current_member.id)
-        .all()
-    )
-    return [_reg_to_read(r) for r in regs]
 
 
 @router.get("/events/{event_id}/my-registration", response_model=Optional[RegistrationRead],

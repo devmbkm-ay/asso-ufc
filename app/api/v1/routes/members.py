@@ -108,19 +108,27 @@ def list_members(
     current_member: CurrentMember,
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(20, ge=1, le=500),
     status: Optional[str] = Query(None, pattern="^(active|inactive|suspended|honorary)$"),
     search: Optional[str] = Query(None, max_length=100),
-    _: Member = RequireSecretary,
 ):
     """
-    Liste paginée des membres avec filtres optionnels.
-    Rôles requis : super_admin, secretary.
+    Liste paginée des membres.
+    Tous les membres authentifiés peuvent lister les membres actifs.
+    Secrétaire / super_admin : accès à tous les statuts.
     """
+    roles = set(_get_roles(db, current_member.id))
+    is_privileged = bool(roles.intersection({"super_admin", "secretary"}))
+
     query = db.query(Member)
 
-    if status:
-        query = query.filter(Member.status == status)
+    if is_privileged:
+        if status:
+            query = query.filter(Member.status == status)
+    else:
+        # Membres ordinaires : actifs uniquement, quel que soit le filtre demandé
+        query = query.filter(Member.status == "active")
+
     if search:
         term = f"%{search.lower()}%"
         query = query.filter(
