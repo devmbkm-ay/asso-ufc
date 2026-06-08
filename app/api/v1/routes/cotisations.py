@@ -19,8 +19,8 @@ from app.schemas.cotisation import (
     PaymentRead, PaymentUpdate, TreasurerDashboard,
 )
 from models import (
-    CotisationFrequency, CotisationPlan, Member, MemberStatus,
-    Payment, PaymentMethod, PaymentStatus,
+    CotisationFrequency, CotisationPlan, Member, MemberRole, MemberStatus,
+    Payment, PaymentMethod, PaymentStatus, Role, RoleName,
 )
 
 router = APIRouter(tags=["Cotisations"])
@@ -28,16 +28,18 @@ router = APIRouter(tags=["Cotisations"])
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _init_payments_for_plan(plan: CotisationPlan, db: Session) -> None:
-    """Insert pending payments for all non-suspended members when a plan is created."""
-    members = db.query(Member).filter(
-        Member.status.in_([MemberStatus.active, MemberStatus.inactive])
-    ).all()
-    if not members:
-        return
+def _has_treasurer_role(db: Session, member_id) -> bool:
+    roles = (
+        db.query(Role.name)
+        .join(MemberRole, MemberRole.role_id == Role.id)
+        .filter(MemberRole.member_id == member_id)
+        .all()
+    )
+    return any(r.name in [RoleName.super_admin, RoleName.treasurer] for r in roles)
 
+
+def _build_periods(plan: CotisationPlan) -> list[tuple[int | None, int]]:
     end = plan.valid_until or date(plan.valid_from.year, 12, 31)
-
     periods: list[tuple[int | None, int]] = []
     if plan.frequency == CotisationFrequency.monthly:
         y, m = plan.valid_from.year, plan.valid_from.month
@@ -48,10 +50,29 @@ def _init_payments_for_plan(plan: CotisationPlan, db: Session) -> None:
             if m > 12:
                 m, y = 1, y + 1
     elif plan.frequency == CotisationFrequency.annual:
-        for yr in range(plan.valid_from.year, end.year + 1):
+        end_yr = (plan.valid_until or plan.valid_from).year
+        for yr in range(plan.valid_from.year, end_yr + 1):
             periods.append((None, yr))
     else:  # one_time
         periods.append((None, plan.valid_from.year))
+    return periods
+
+
+def _init_payments_for_plan(plan: CotisationPlan, db: Session) -> None:
+    """Insert pending payments for all non-suspended members when a plan is created."""
+    members = db.query(Member).filter(
+        Member.status.in_([MemberStatus.active, MemberStatus.inactive])
+    ).all()
+    if not members:
+        return
+
+    # Query existing entries to avoid duplicates (on_conflict_do_nothing misses NULL period_month)
+    existing: set[tuple] = {
+        (str(p.member_id), p.period_month, p.period_year)
+        for p in db.query(Payment.member_id, Payment.period_month, Payment.period_year)
+            .filter(Payment.cotisation_plan_id == plan.id)
+            .all()
+    }
 
     today = date.today()
     rows = [
@@ -68,7 +89,8 @@ def _init_payments_for_plan(plan: CotisationPlan, db: Session) -> None:
             "recorded_by": None,
         }
         for member in members
-        for (pm, py) in periods
+        for (pm, py) in _build_periods(plan)
+        if (str(member.id), pm, py) not in existing
     ]
 
     if rows:
@@ -179,8 +201,13 @@ def list_payments(
     month: Optional[int] = Query(None, ge=1, le=12),
     status_filter: Optional[str] = Query(None, alias="status",
                                           pattern="^(pending|confirmed|cancelled)$"),
-    _=RequireTreasurer,
 ):
+    is_treasurer = _has_treasurer_role(db, current_member.id)
+    if not is_treasurer:
+        # Members can only query their own payments
+        if member_id is None or member_id != current_member.id:
+            raise HTTPException(status_code=403, detail="Accès interdit")
+
     q = db.query(Payment)
     if member_id:
         q = q.filter(Payment.member_id == member_id)
@@ -234,7 +261,6 @@ def create_payment(
     )
     db.add(payment)
 
-    # Met à jour le statut du membre si nécessaire
     if member.status == MemberStatus.inactive:
         member.status = MemberStatus.active
 
@@ -242,6 +268,118 @@ def create_payment(
     db.refresh(payment)
     return _payment_to_read(payment)
 
+
+# ── Routes statiques /payments/* avant /payments/{id} pour éviter les conflits ─
+
+@router.get("/payments/grid", response_model=list[PaymentGridRow],
+            summary="Grille des paiements par membre et par mois")
+def payment_grid(
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+    year: int = Query(default_factory=lambda: date.today().year),
+    _=RequireTreasurer,
+):
+    members = db.query(Member).filter(
+        Member.status.in_([MemberStatus.active, MemberStatus.inactive])
+    ).order_by(Member.last_name, Member.first_name).all()
+
+    payments = db.query(Payment).filter(
+        Payment.period_year == year,
+        Payment.period_month != None,
+    ).all()
+
+    index: dict[tuple, Payment] = {
+        (str(p.member_id), p.period_month): p for p in payments
+    }
+
+    rows = []
+    for m in members:
+        cells = []
+        for month in range(1, 13):
+            p = index.get((str(m.id), month))
+            cells.append(MonthCell(
+                month=month,
+                status=p.status.value if p else "none",
+                amount=p.amount if p else None,
+                payment_id=p.id if p else None,
+            ))
+        rows.append(PaymentGridRow(
+            member_id=m.id,
+            member_name=f"{m.first_name} {m.last_name}",
+            year=year,
+            months=cells,
+        ))
+    return rows
+
+
+@router.get("/payments/export", summary="Export CSV des paiements")
+def export_payments_csv(
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+    year: Optional[int] = None,
+    _=RequireTreasurer,
+):
+    q = db.query(Payment).filter(Payment.status == PaymentStatus.confirmed)
+    if year:
+        q = q.filter(Payment.period_year == year)
+    payments = q.order_by(Payment.payment_date.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Date", "Membre", "Plan", "Montant (€)",
+        "Méthode", "Période", "Statut", "Référence",
+    ])
+    for p in payments:
+        period = f"{p.period_month:02d}/{p.period_year}" if p.period_month else str(p.period_year)
+        writer.writerow([
+            p.payment_date.isoformat(),
+            f"{p.member.first_name} {p.member.last_name}",
+            p.cotisation_plan.label,
+            float(p.amount),
+            p.method.value,
+            period,
+            p.status.value,
+            p.reference or "",
+        ])
+
+    output.seek(0)
+    filename = f"paiements_{year or 'all'}.csv"
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8-sig")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.post("/payments/{payment_id}/confirm", response_model=PaymentRead,
+             summary="Membre déclare avoir réglé sa cotisation")
+def member_confirm_payment(
+    payment_id: UUID,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+):
+    payment = db.query(Payment).filter(
+        Payment.id == payment_id,
+        Payment.member_id == current_member.id,
+        Payment.status == PaymentStatus.pending,
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Paiement introuvable ou déjà traité")
+
+    payment.status   = PaymentStatus.confirmed
+    payment.recorded_by = current_member.id
+
+    member = db.query(Member).filter(Member.id == current_member.id).first()
+    if member and member.status == MemberStatus.inactive:
+        member.status = MemberStatus.active
+
+    db.commit()
+    db.refresh(payment)
+    return _payment_to_read(payment)
+
+
+# ── Routes paramétrées /payments/{id} ─────────────────────────────────────────
 
 @router.get("/payments/{payment_id}", response_model=PaymentRead,
             summary="Détail d'un paiement")
@@ -337,87 +475,3 @@ def treasurer_dashboard(
     )
 
 
-# ── Grille mensuelle ──────────────────────────────────────────────────────────
-
-@router.get("/payments/grid", response_model=list[PaymentGridRow],
-            summary="Grille des paiements par membre et par mois")
-def payment_grid(
-    current_member: CurrentMember,
-    db: Session = Depends(get_db),
-    year: int = Query(default_factory=lambda: date.today().year),
-    _=RequireTreasurer,
-):
-    members = db.query(Member).filter(
-        Member.status.in_([MemberStatus.active, MemberStatus.inactive])
-    ).order_by(Member.last_name, Member.first_name).all()
-
-    payments = db.query(Payment).filter(
-        Payment.period_year == year,
-        Payment.period_month != None,
-    ).all()
-
-    # Index: (member_id, month) → payment
-    index: dict[tuple, Payment] = {
-        (str(p.member_id), p.period_month): p for p in payments
-    }
-
-    rows = []
-    for m in members:
-        cells = []
-        for month in range(1, 13):
-            p = index.get((str(m.id), month))
-            cells.append(MonthCell(
-                month=month,
-                status=p.status.value if p else "none",
-                amount=p.amount if p else None,
-                payment_id=p.id if p else None,
-            ))
-        rows.append(PaymentGridRow(
-            member_id=m.id,
-            member_name=f"{m.first_name} {m.last_name}",
-            year=year,
-            months=cells,
-        ))
-    return rows
-
-
-# ── Export CSV ────────────────────────────────────────────────────────────────
-
-@router.get("/payments/export", summary="Export CSV des paiements")
-def export_payments_csv(
-    current_member: CurrentMember,
-    db: Session = Depends(get_db),
-    year: Optional[int] = None,
-    _=RequireTreasurer,
-):
-    q = db.query(Payment).filter(Payment.status == PaymentStatus.confirmed)
-    if year:
-        q = q.filter(Payment.period_year == year)
-    payments = q.order_by(Payment.payment_date.desc()).all()
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([
-        "Date", "Membre", "Plan", "Montant (€)",
-        "Méthode", "Période", "Statut", "Référence",
-    ])
-    for p in payments:
-        period = f"{p.period_month:02d}/{p.period_year}" if p.period_month else str(p.period_year)
-        writer.writerow([
-            p.payment_date.isoformat(),
-            f"{p.member.first_name} {p.member.last_name}",
-            p.cotisation_plan.label,
-            float(p.amount),
-            p.method.value,
-            period,
-            p.status.value,
-            p.reference or "",
-        ])
-
-    output.seek(0)
-    filename = f"paiements_{year or 'all'}.csv"
-    return StreamingResponse(
-        io.BytesIO(output.getvalue().encode("utf-8-sig")),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
