@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.deps import CurrentMember, RequireSecretary
+from app.core.deps import CurrentMember, RequireAdmin
 from app.core import email as email_svc
 from app.schemas.member import InviteCreate, InviteRead, InviteTokenCheck
 
@@ -37,7 +37,7 @@ def create_invite(
     payload: InviteCreate,
     current_member: CurrentMember,
     db: Session = Depends(get_db),
-    _=RequireSecretary,
+    _=RequireAdmin,
 ):
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(tz=timezone.utc) + timedelta(days=7)
@@ -63,7 +63,7 @@ def create_invite(
 def list_invites(
     current_member: CurrentMember,
     db: Session = Depends(get_db),
-    _=RequireSecretary,
+    _=RequireAdmin,
 ):
     invites = (
         db.query(MemberInvite)
@@ -88,7 +88,7 @@ def revoke_invite(
     token: str,
     current_member: CurrentMember,
     db: Session = Depends(get_db),
-    _=RequireSecretary,
+    _=RequireAdmin,
 ):
     invite = db.query(MemberInvite).filter(MemberInvite.token == token).first()
     if not invite:
