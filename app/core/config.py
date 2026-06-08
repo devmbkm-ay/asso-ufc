@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # URL publique de l'API (utilisée pour construire les URLs des fichiers uploadés)
     API_BASE_URL: str = "https://api.assos.ricardomboukou.online"
 
+    # URL publique du frontend (utilisée pour construire les liens d'invitation)
+    FRONTEND_URL: str = "https://asso-ufc-frontend.vercel.app"
+
     # CORS — format JSON dans .env : ALLOWED_ORIGINS=["http://localhost:3000","https://asso.fr"]
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "https://asso-ufc-frontend.vercel.app"]
 

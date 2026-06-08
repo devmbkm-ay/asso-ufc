@@ -287,3 +287,15 @@ class Contribution(Base):
 
     collecte = relationship("Collecte", back_populates="contributions")
     member   = relationship("Member")
+
+
+class MemberInvite(Base):
+    __tablename__ = "member_invites"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email      = Column(String(255), nullable=False, index=True)
+    token      = Column(String(64), nullable=False, unique=True, index=True)
+    invited_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -127,6 +127,24 @@ def send_cotisation_reminder(
     )
 
 
+def send_invite(to_email: str, invited_by_name: str, invite_link: str) -> bool:
+    body = f"""
+    <p>Bonjour,</p>
+    <p><strong>{invited_by_name}</strong> vous invite à rejoindre notre association.</p>
+    <p>Cliquez sur le bouton ci-dessous pour créer votre compte membre :</p>
+    <a href="{invite_link}" class="cta">Créer mon compte</a>
+    <p style="margin-top:20px;font-size:12px;color:#888;">
+      Ce lien est valable 7 jours. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
+    </p>
+    """
+    return _send(
+        to_email=to_email,
+        to_name=to_email,
+        subject=f"Invitation à rejoindre {settings.EMAIL_FROM_NAME}",
+        html=_base_html("Vous êtes invité(e) !", body),
+    )
+
+
 def send_event_invitation(
     to_email: str,
     first_name: str,
