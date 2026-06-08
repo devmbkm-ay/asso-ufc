@@ -295,7 +295,7 @@ def payment_grid(
 
     payments = db.query(Payment).filter(
         Payment.period_year == year,
-        Payment.period_month != None,
+        Payment.period_month.isnot(None),
     ).all()
 
     index: dict[tuple, Payment] = {
@@ -519,7 +519,7 @@ def treasurer_dashboard(
     ).scalar() or 0
 
     pending_count = db.query(Payment).filter(
-        Payment.status == PaymentStatus.pending,
+        Payment.status.in_([PaymentStatus.pending, PaymentStatus.declared]),
     ).count()
 
     return TreasurerDashboard(

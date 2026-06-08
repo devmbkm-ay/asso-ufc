@@ -141,7 +141,6 @@ class MemberRole(Base):
     role_id     = Column(UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
     assigned_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    assigned_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
 
     member = relationship("Member", back_populates="roles", foreign_keys=[member_id])
     role   = relationship("Role", back_populates="members")

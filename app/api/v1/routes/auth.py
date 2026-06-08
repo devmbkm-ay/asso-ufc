@@ -103,7 +103,7 @@ def register_via_invite(payload: RegisterViaInvite, db: Session = Depends(get_db
         db.query(MemberInvite)
         .filter(
             MemberInvite.token == payload.token,
-            MemberInvite.used_at == None,  # noqa: E711
+            MemberInvite.used_at.is_(None),
             MemberInvite.expires_at > now,
         )
         .first()
