@@ -38,6 +38,16 @@ def _has_treasurer_role(db: Session, member_id) -> bool:
     return any(r.name in [RoleName.super_admin, RoleName.treasurer] for r in roles)
 
 
+def _can_validate_payment(db: Session, member_id) -> bool:
+    roles = (
+        db.query(Role.name)
+        .join(MemberRole, MemberRole.role_id == Role.id)
+        .filter(MemberRole.member_id == member_id)
+        .all()
+    )
+    return any(r.name in [RoleName.super_admin, RoleName.treasurer, RoleName.secretary] for r in roles)
+
+
 def _build_periods(plan: CotisationPlan) -> list[tuple[int | None, int]]:
     end = plan.valid_until or date(plan.valid_from.year, 12, 31)
     periods: list[tuple[int | None, int]] = []
@@ -200,7 +210,7 @@ def list_payments(
     year: Optional[int] = None,
     month: Optional[int] = Query(None, ge=1, le=12),
     status_filter: Optional[str] = Query(None, alias="status",
-                                          pattern="^(pending|confirmed|cancelled)$"),
+                                          pattern="^(pending|declared|confirmed|cancelled)$"),
 ):
     is_treasurer = _has_treasurer_role(db, current_member.id)
     if not is_treasurer:
@@ -367,12 +377,60 @@ def member_confirm_payment(
     if not payment:
         raise HTTPException(status_code=404, detail="Paiement introuvable ou déjà traité")
 
-    payment.status   = PaymentStatus.confirmed
+    payment.status = PaymentStatus.declared
+
+    db.commit()
+    db.refresh(payment)
+    return _payment_to_read(payment)
+
+
+@router.post("/payments/{payment_id}/validate", response_model=PaymentRead,
+             summary="Trésorier/secrétaire valide la déclaration de paiement")
+def validate_declared_payment(
+    payment_id: UUID,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+):
+    if not _can_validate_payment(db, current_member.id):
+        raise HTTPException(status_code=403, detail="Réservé au trésorier, secrétaire ou super-admin")
+
+    payment = db.query(Payment).filter(
+        Payment.id == payment_id,
+        Payment.status == PaymentStatus.declared,
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Paiement introuvable ou non déclaré")
+
+    payment.status = PaymentStatus.confirmed
     payment.recorded_by = current_member.id
 
-    member = db.query(Member).filter(Member.id == current_member.id).first()
+    member = db.query(Member).filter(Member.id == payment.member_id).first()
     if member and member.status == MemberStatus.inactive:
         member.status = MemberStatus.active
+
+    db.commit()
+    db.refresh(payment)
+    return _payment_to_read(payment)
+
+
+@router.post("/payments/{payment_id}/reject", response_model=PaymentRead,
+             summary="Trésorier/secrétaire rejette la déclaration de paiement")
+def reject_declared_payment(
+    payment_id: UUID,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+):
+    if not _can_validate_payment(db, current_member.id):
+        raise HTTPException(status_code=403, detail="Réservé au trésorier, secrétaire ou super-admin")
+
+    payment = db.query(Payment).filter(
+        Payment.id == payment_id,
+        Payment.status == PaymentStatus.declared,
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Paiement introuvable ou non déclaré")
+
+    payment.status = PaymentStatus.pending
 
     db.commit()
     db.refresh(payment)

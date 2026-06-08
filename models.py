@@ -58,6 +58,7 @@ class PaymentMethod(str, enum.Enum):
 
 class PaymentStatus(str, enum.Enum):
     pending   = "pending"
+    declared  = "declared"   # membre a déclaré avoir réglé, attente validation trésorier
     confirmed = "confirmed"
     cancelled = "cancelled"
 
