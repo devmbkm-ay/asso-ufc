@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequireAdmin, RequireTreasurer
@@ -18,13 +19,61 @@ from app.schemas.cotisation import (
     PaymentRead, PaymentUpdate, TreasurerDashboard,
 )
 from models import (
-    CotisationPlan, Member, MemberStatus, Payment, PaymentStatus,
+    CotisationFrequency, CotisationPlan, Member, MemberStatus,
+    Payment, PaymentMethod, PaymentStatus,
 )
 
 router = APIRouter(tags=["Cotisations"])
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _init_payments_for_plan(plan: CotisationPlan, db: Session) -> None:
+    """Insert pending payments for all non-suspended members when a plan is created."""
+    members = db.query(Member).filter(
+        Member.status.in_([MemberStatus.active, MemberStatus.inactive])
+    ).all()
+    if not members:
+        return
+
+    end = plan.valid_until or date(plan.valid_from.year, 12, 31)
+
+    periods: list[tuple[int | None, int]] = []
+    if plan.frequency == CotisationFrequency.monthly:
+        y, m = plan.valid_from.year, plan.valid_from.month
+        ey, em = end.year, end.month
+        while (y, m) <= (ey, em):
+            periods.append((m, y))
+            m += 1
+            if m > 12:
+                m, y = 1, y + 1
+    elif plan.frequency == CotisationFrequency.annual:
+        for yr in range(plan.valid_from.year, end.year + 1):
+            periods.append((None, yr))
+    else:  # one_time
+        periods.append((None, plan.valid_from.year))
+
+    today = date.today()
+    rows = [
+        {
+            "id": uuid4(),
+            "member_id": member.id,
+            "cotisation_plan_id": plan.id,
+            "amount": plan.amount,
+            "payment_date": today,
+            "period_month": pm,
+            "period_year": py,
+            "method": PaymentMethod.cash,
+            "status": PaymentStatus.pending,
+            "recorded_by": None,
+        }
+        for member in members
+        for (pm, py) in periods
+    ]
+
+    if rows:
+        db.execute(pg_insert(Payment).values(rows).on_conflict_do_nothing())
+
 
 def _payment_to_read(p: Payment) -> PaymentRead:
     return PaymentRead(
@@ -70,6 +119,8 @@ def create_plan(
 ):
     plan = CotisationPlan(id=uuid4(), **payload.model_dump())
     db.add(plan)
+    db.flush()  # assign plan.id before _init_payments_for_plan reads it
+    _init_payments_for_plan(plan, db)
     db.commit()
     db.refresh(plan)
     return plan

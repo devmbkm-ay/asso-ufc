@@ -1,9 +1,11 @@
 import math
+from datetime import date
 from typing import Annotated, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -15,12 +17,59 @@ from app.schemas.member import (
     MemberStatusUpdate, MemberUpdate, PaginatedMembers, RoleAssign,
 )
 
-from models import AuditLog, Member, MemberRole, Notification, NotificationType, Role, RoleName
+from models import (
+    AuditLog, CotisationFrequency, CotisationPlan, Member, MemberRole,
+    Notification, NotificationType, Payment, PaymentMethod, PaymentStatus,
+    Role, RoleName,
+)
 
 router = APIRouter(prefix="/members", tags=["Membres"])
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _init_payments_for_member(member: Member, db: Session) -> None:
+    """Create pending payments for a new member on all currently active plans."""
+    plans = db.query(CotisationPlan).filter(CotisationPlan.is_active == True).all()
+    if not plans:
+        return
+
+    today = date.today()
+    rows = []
+    for plan in plans:
+        end = plan.valid_until or date(plan.valid_from.year, 12, 31)
+        periods: list[tuple[int | None, int]] = []
+        if plan.frequency == CotisationFrequency.monthly:
+            y, m = plan.valid_from.year, plan.valid_from.month
+            ey, em = end.year, end.month
+            while (y, m) <= (ey, em):
+                periods.append((m, y))
+                m += 1
+                if m > 12:
+                    m, y = 1, y + 1
+        elif plan.frequency == CotisationFrequency.annual:
+            for yr in range(plan.valid_from.year, end.year + 1):
+                periods.append((None, yr))
+        else:  # one_time
+            periods.append((None, plan.valid_from.year))
+
+        for pm, py in periods:
+            rows.append({
+                "id": uuid4(),
+                "member_id": member.id,
+                "cotisation_plan_id": plan.id,
+                "amount": plan.amount,
+                "payment_date": today,
+                "period_month": pm,
+                "period_year": py,
+                "method": PaymentMethod.cash,
+                "status": PaymentStatus.pending,
+                "recorded_by": None,
+            })
+
+    if rows:
+        db.execute(pg_insert(Payment).values(rows).on_conflict_do_nothing())
+
 
 def _get_roles(db: Session, member_id: UUID) -> list[str]:
     rows = (
@@ -149,6 +198,7 @@ def create_member(
     _audit(db, current_member.id, "member.create", new_member.id,
            {"after": {"email": payload.email, "name": f"{payload.first_name} {payload.last_name}"}})
 
+    _init_payments_for_member(new_member, db)
     db.commit()
     db.refresh(new_member)
 
