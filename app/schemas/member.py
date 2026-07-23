@@ -72,6 +72,7 @@ class MemberListItem(BaseModel):
     first_name: str
     last_name:  str
     email:      EmailStr
+    phone:      Optional[str] = None
     status:     str
     joined_at:  date
     roles:      list[str] = []
