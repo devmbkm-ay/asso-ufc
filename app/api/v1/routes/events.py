@@ -234,8 +234,12 @@ def list_registrations(
     event_id: UUID,
     current_member: CurrentMember,
     db: Session = Depends(get_db),
-    _=RequireSecretary,
 ):
+    """
+    Ouvert à tout membre authentifié (pas seulement aux admins) : la liste des
+    inscrits et leur montant de contribution est visible par toute
+    l'association, par transparence sur le financement des événements.
+    """
     event = _get_event_or_404(event_id, db)
     return [_reg_to_read(r) for r in event.registrations]
 
