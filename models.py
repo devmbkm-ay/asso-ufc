@@ -260,6 +260,7 @@ class Collecte(Base):
     photo_url        = Column(String(500))
     description      = Column(Text)
     min_amount       = Column(Numeric(10, 2), nullable=False, default=20.00)
+    goal_amount      = Column(Numeric(10, 2), nullable=True)
     start_date       = Column(Date, nullable=False)
     # end_date = start_date + 14 jours, calculé à la création
     end_date         = Column(Date, nullable=False)

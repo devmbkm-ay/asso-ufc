@@ -12,14 +12,47 @@ from app.core.deps import CurrentMember, RequireAdmin, RequireSecretary
 from app.schemas.collecte import (
     CollecteCreate, CollecteUpdate, CollecteRead, ContributionCreate, ContributionRead,
 )
-from models import Collecte, Contribution, Member
+from models import Collecte, Contribution, Member, MemberRole, Role, RoleName
 
 router = APIRouter(prefix="/collectes", tags=["Collectes"])
 
 DURATION_DAYS = 14
 
+# Rôles habilités à voir l'identité réelle des contributeurs anonymes
+ADMIN_ROLES = (RoleName.super_admin, RoleName.secretary)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _is_admin(current_member: Member, db: Session) -> bool:
+    hit = (
+        db.query(Role.name)
+        .join(MemberRole, MemberRole.role_id == Role.id)
+        .filter(MemberRole.member_id == current_member.id, Role.name.in_(ADMIN_ROLES))
+        .first()
+    )
+    return hit is not None
+
+
+def _contribution_to_read(
+    contribution: Contribution, member: Member, current_member: Member, is_admin: bool,
+) -> ContributionRead:
+    """
+    Masque l'identité d'une contribution anonyme sauf pour son auteur ou un admin.
+    member_id est masqué en plus de member_name : sinon l'identité reste
+    retrouvable via GET /members/{id} malgré le nom affiché "Membre anonyme".
+    """
+    reveal = (not contribution.is_anonymous) or is_admin or (member.id == current_member.id)
+    return ContributionRead(
+        id=contribution.id,
+        collecte_id=contribution.collecte_id,
+        member_id=member.id if reveal else None,
+        member_name=f"{member.first_name} {member.last_name}" if reveal else "Membre anonyme",
+        amount=contribution.amount,
+        is_anonymous=contribution.is_anonymous,
+        contributed_at=contribution.contributed_at,
+    )
+
 
 def _collecte_to_read(collecte: Collecte, db: Session) -> CollecteRead:
     today = date.today()
@@ -50,6 +83,7 @@ def _collecte_to_read(collecte: Collecte, db: Session) -> CollecteRead:
         photo_url=collecte.photo_url,
         description=collecte.description,
         min_amount=collecte.min_amount,
+        goal_amount=collecte.goal_amount,
         start_date=collecte.start_date,
         end_date=collecte.end_date,
         is_closed=collecte.is_closed,
@@ -84,6 +118,7 @@ def create_collecte(
         photo_url=payload.photo_url,
         description=payload.description,
         min_amount=payload.min_amount,
+        goal_amount=payload.goal_amount,
         start_date=payload.start_date,
         end_date=payload.start_date + timedelta(days=DURATION_DAYS),
         category=payload.category,
@@ -177,15 +212,9 @@ def contribute(
     db.commit()
     db.refresh(contribution)
 
-    return ContributionRead(
-        id=contribution.id,
-        collecte_id=contribution.collecte_id,
-        member_id=contribution.member_id,
-        member_name="Membre anonyme" if payload.is_anonymous else f"{current_member.first_name} {current_member.last_name}",
-        amount=contribution.amount,
-        is_anonymous=contribution.is_anonymous,
-        contributed_at=contribution.contributed_at,
-    )
+    # L'auteur voit toujours sa propre contribution en clair, même anonyme
+    # pour les autres — cf. _contribution_to_read (member == current_member).
+    return _contribution_to_read(contribution, current_member, current_member, is_admin=False)
 
 
 @router.get(
@@ -209,18 +238,8 @@ def list_contributions(
         .all()
     )
 
-    return [
-        ContributionRead(
-            id=c.id,
-            collecte_id=c.collecte_id,
-            member_id=c.member_id,
-            member_name="Membre anonyme" if c.is_anonymous else f"{m.first_name} {m.last_name}",
-            amount=c.amount,
-            is_anonymous=c.is_anonymous,
-            contributed_at=c.contributed_at,
-        )
-        for c, m in rows
-    ]
+    is_admin = _is_admin(current_member, db)
+    return [_contribution_to_read(c, m, current_member, is_admin) for c, m in rows]
 
 
 @router.patch(

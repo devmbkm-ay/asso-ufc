@@ -14,6 +14,7 @@ class CollecteCreate(BaseModel):
     photo_url:        Optional[str]  = Field(None, max_length=500)
     description:      Optional[str]  = None
     min_amount:       Decimal        = Field(Decimal("20.00"), ge=1)
+    goal_amount:      Optional[Decimal] = Field(None, ge=1)
     start_date:       date
     category:         Optional[str]  = None
 
@@ -24,6 +25,7 @@ class CollecteUpdate(BaseModel):
     photo_url:        Optional[str]     = Field(None, max_length=500)
     description:      Optional[str]     = None
     min_amount:       Optional[Decimal] = Field(None, ge=1)
+    goal_amount:      Optional[Decimal] = Field(None, ge=1)
     category:         Optional[str]     = None
 
 
@@ -39,6 +41,7 @@ class CollecteRead(BaseModel):
     photo_url:         Optional[str]      = None
     description:       Optional[str]      = None
     min_amount:        Decimal
+    goal_amount:       Optional[Decimal]  = None
     start_date:        date
     end_date:          date
     is_closed:         bool
@@ -56,7 +59,10 @@ class CollecteRead(BaseModel):
 class ContributionRead(BaseModel):
     id:             UUID
     collecte_id:    UUID
-    member_id:      UUID
+    # None quand la contribution est anonyme et que le lecteur n'est ni
+    # l'auteur ni un admin — évite de pouvoir retrouver l'identité via
+    # GET /members/{id} malgré member_name masqué.
+    member_id:      Optional[UUID] = None
     member_name:    str
     amount:         Decimal
     is_anonymous:   bool
