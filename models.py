@@ -299,3 +299,16 @@ class MemberInvite(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used_at    = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id  = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False, index=True)
+    token      = Column(String(64), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    member = relationship("Member")

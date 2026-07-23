@@ -1,10 +1,12 @@
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 from uuid import UUID, uuid4
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import CurrentMember
 from app.core.security import (
@@ -13,11 +15,16 @@ from app.core.security import (
 )
 from app.core import email as email_svc
 from app.schemas.member import (
-    LoginRequest, MemberCreate, MemberRead,
-    RefreshRequest, RegisterViaInvite, TokenResponse,
+    ForgotPasswordRequest, LoginRequest, MemberCreate, MemberRead,
+    RefreshRequest, RegisterViaInvite, ResetPasswordRequest, TokenResponse,
 )
 
-from models import Member, MemberInvite, MemberRole, Notification, NotificationType, Role, RoleName
+from models import (
+    Member, MemberInvite, MemberRole, Notification, NotificationType,
+    PasswordReset, Role, RoleName,
+)
+
+RESET_TOKEN_TTL = timedelta(hours=1)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -157,6 +164,55 @@ def register_via_invite(payload: RegisterViaInvite, db: Session = Depends(get_db
 
     roles = _get_member_roles(db, new_member.id)
     return _member_to_read(new_member, roles)
+
+
+@router.post("/forgot-password", summary="Demander un lien de réinitialisation de mot de passe")
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Toujours répondre par un succès générique, que l'email existe ou non
+    — évite qu'un tiers puisse énumérer les comptes existants via cet endpoint.
+    """
+    member = db.query(Member).filter(Member.email == payload.email).first()
+    if member:
+        token = secrets.token_urlsafe(32)
+        db.add(PasswordReset(
+            id=uuid4(),
+            member_id=member.id,
+            token=token,
+            expires_at=datetime.now(tz=timezone.utc) + RESET_TOKEN_TTL,
+        ))
+        db.commit()
+
+        link = f"{settings.FRONTEND_URL}/reinitialiser-mot-de-passe/{token}"
+        email_svc.send_password_reset(member.email, member.first_name, link)
+
+    return {"message": "Si cet email existe, un lien de réinitialisation vient de lui être envoyé."}
+
+
+@router.post("/reset-password", summary="Réinitialiser le mot de passe via un token")
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    now = datetime.now(tz=timezone.utc)
+    reset = (
+        db.query(PasswordReset)
+        .filter(
+            PasswordReset.token == payload.token,
+            PasswordReset.used_at.is_(None),
+            PasswordReset.expires_at > now,
+        )
+        .first()
+    )
+    if not reset:
+        raise HTTPException(status_code=400, detail="Lien de réinitialisation invalide ou expiré")
+
+    member = db.query(Member).filter(Member.id == reset.member_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Membre introuvable")
+
+    member.password_hash = hash_password(payload.new_password)
+    reset.used_at = now
+    db.commit()
+
+    return {"message": "Mot de passe réinitialisé avec succès."}
 
 
 @router.post("/setup", summary="Créer le premier super-admin (désactivé dès qu'un membre existe)")

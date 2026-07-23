@@ -145,6 +145,24 @@ def send_invite(to_email: str, invited_by_name: str, invite_link: str) -> bool:
     )
 
 
+def send_password_reset(to_email: str, first_name: str, reset_link: str) -> bool:
+    body = f"""
+    <p>Bonjour <strong>{first_name}</strong>,</p>
+    <p>Une demande de réinitialisation de mot de passe a été faite pour votre compte.</p>
+    <p>Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe :</p>
+    <a href="{reset_link}" class="cta">Réinitialiser mon mot de passe</a>
+    <p style="margin-top:20px;font-size:12px;color:#888;">
+      Ce lien est valable 1 heure. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email — votre mot de passe actuel reste inchangé.
+    </p>
+    """
+    return _send(
+        to_email=to_email,
+        to_name=first_name,
+        subject=f"Réinitialisation de votre mot de passe — {settings.EMAIL_FROM_NAME}",
+        html=_base_html("Réinitialisation de mot de passe", body),
+    )
+
+
 def send_event_invitation(
     to_email: str,
     first_name: str,
