@@ -109,7 +109,7 @@ def list_members(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=500),
-    status: Optional[str] = Query(None, pattern="^(active|inactive|suspended|honorary)$"),
+    status: Optional[str] = Query(None, pattern="^(active|inactive|suspended|honorary|pending)$"),
     search: Optional[str] = Query(None, max_length=100),
 ):
     """
@@ -303,6 +303,24 @@ def update_member_status(
     member.status = payload.status
     _audit(db, current_member.id, "member.status_change", member_id,
            {"before": {"status": before_status}, "after": {"status": payload.status}})
+
+    # Approbation d'une auto-inscription via code d'adhésion : c'est ici que le
+    # membre devient réellement actif, donc c'est ici (et non à l'inscription)
+    # qu'on initialise ses cotisations et qu'on envoie l'email de bienvenue.
+    if before_status == "pending" and payload.status == "active":
+        _init_payments_for_member(member, db)
+        from datetime import datetime, timezone
+        ok = email_svc.send_welcome(member.email, member.first_name)
+        db.add(Notification(
+            id=uuid4(),
+            member_id=member.id,
+            type=NotificationType.welcome,
+            subject="Bienvenue dans l'association !",
+            body="",
+            sent=ok,
+            sent_at=datetime.now(tz=timezone.utc) if ok else None,
+        ))
+
     db.commit()
     db.refresh(member)
     return _member_to_read(member, _get_roles(db, member.id))

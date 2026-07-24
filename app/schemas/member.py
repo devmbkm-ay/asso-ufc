@@ -157,3 +157,29 @@ class RegisterViaInvite(BaseModel):
         if not any(c.isdigit() for c in v):
             raise ValueError("Le mot de passe doit contenir au moins un chiffre")
         return v
+
+
+# ── Code d'adhésion (auto-inscription) ────────────────────────────────────────
+
+class JoinCodeRead(BaseModel):
+    code:       str
+    link:       str
+    is_active:  bool
+    expires_at: datetime
+    created_at: datetime
+
+
+class RegisterViaCode(BaseModel):
+    code:       str
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name:  str = Field(..., min_length=1, max_length=100)
+    email:      EmailStr
+    phone:      Optional[str] = Field(None, max_length=30)
+    password:   str = Field(..., min_length=8, max_length=72)
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Le mot de passe doit contenir au moins un chiffre")
+        return v

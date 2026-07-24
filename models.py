@@ -33,6 +33,9 @@ class MemberStatus(str, enum.Enum):
     inactive  = "inactive"
     suspended = "suspended"
     honorary  = "honorary"
+    # Compte créé via un lien/code d'adhésion public, en attente de
+    # validation par un admin avant de devenir un membre à part entière.
+    pending   = "pending"
 
 
 class RoleName(str, enum.Enum):
@@ -299,6 +302,20 @@ class MemberInvite(Base):
     invited_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class JoinCode(Base):
+    # Code d'adhésion réutilisable : contrairement à MemberInvite (un token
+    # à usage unique par email), un même code peut être partagé et utilisé
+    # par plusieurs personnes tant qu'il est actif et non expiré.
+    __tablename__ = "join_codes"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    code       = Column(String(16), nullable=False, unique=True, index=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False)
+    is_active  = Column(Boolean, nullable=False, default=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

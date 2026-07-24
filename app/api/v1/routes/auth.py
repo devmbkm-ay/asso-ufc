@@ -16,12 +16,13 @@ from app.core.security import (
 from app.core import email as email_svc
 from app.schemas.member import (
     ForgotPasswordRequest, LoginRequest, MemberCreate, MemberRead,
-    RefreshRequest, RegisterViaInvite, ResetPasswordRequest, TokenResponse,
+    RefreshRequest, RegisterViaCode, RegisterViaInvite, ResetPasswordRequest,
+    TokenResponse,
 )
 
 from models import (
-    Member, MemberInvite, MemberRole, Notification, NotificationType,
-    PasswordReset, Role, RoleName,
+    JoinCode, Member, MemberInvite, MemberRole, MemberStatus, Notification,
+    NotificationType, PasswordReset, Role, RoleName,
 )
 
 RESET_TOKEN_TTL = timedelta(hours=1)
@@ -62,6 +63,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Compte suspendu — contactez l'administrateur",
+        )
+    if member.status == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Votre inscription est en attente de validation par un administrateur",
         )
 
     roles = _get_member_roles(db, member.id)
@@ -161,6 +167,55 @@ def register_via_invite(payload: RegisterViaInvite, db: Session = Depends(get_db
         sent_at=datetime.now(tz=timezone.utc) if ok else None,
     ))
     db.commit()
+
+    roles = _get_member_roles(db, new_member.id)
+    return _member_to_read(new_member, roles)
+
+
+@router.post("/register-via-code", response_model=MemberRead, status_code=status.HTTP_201_CREATED,
+             summary="S'inscrire via un code d'adhésion (public, compte en attente d'approbation)")
+def register_via_code(payload: RegisterViaCode, db: Session = Depends(get_db)):
+    now = datetime.now(tz=timezone.utc)
+    join_code = (
+        db.query(JoinCode)
+        .filter(
+            JoinCode.code == payload.code.upper(),
+            JoinCode.is_active.is_(True),
+            JoinCode.expires_at > now,
+        )
+        .first()
+    )
+    if not join_code:
+        raise HTTPException(status_code=400, detail="Code d'adhésion invalide ou expiré")
+
+    if db.query(Member).filter(Member.email == payload.email).first():
+        raise HTTPException(status_code=409, detail="Un compte avec cet email existe déjà")
+
+    default_role = db.query(Role).filter(Role.name == RoleName.member).first()
+
+    new_member = Member(
+        id=uuid4(),
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        email=payload.email,
+        phone=payload.phone,
+        password_hash=hash_password(payload.password),
+        status=MemberStatus.pending,
+        created_by=join_code.created_by,
+    )
+    db.add(new_member)
+    db.flush()
+
+    if default_role:
+        db.add(MemberRole(
+            id=uuid4(),
+            member_id=new_member.id,
+            role_id=default_role.id,
+            assigned_by=join_code.created_by,
+        ))
+
+    db.commit()
+    db.refresh(new_member)
 
     roles = _get_member_roles(db, new_member.id)
     return _member_to_read(new_member, roles)

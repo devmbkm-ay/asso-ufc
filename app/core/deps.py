@@ -43,11 +43,17 @@ def get_current_member(
     member = db.query(Member).filter(Member.id == UUID(member_id)).first()
     if not member:
         raise credentials_exception
-    # Bloque les comptes suspendus même avec un token encore valide
+    # Bloque les comptes suspendus ou en attente d'approbation même avec un
+    # token encore valide
     if member.status == "suspended":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Compte suspendu",
+        )
+    if member.status == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Compte en attente d'approbation",
         )
     return member
 
