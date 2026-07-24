@@ -37,6 +37,7 @@ class MemberStatus(str, enum.Enum):
 
 class RoleName(str, enum.Enum):
     super_admin = "super_admin"
+    president   = "president"
     treasurer   = "treasurer"
     secretary   = "secretary"
     member      = "member"

@@ -26,6 +26,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         render_as_batch=False,
+        transaction_per_migration=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -43,6 +44,10 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             compare_type=True,
             render_as_batch=False,
+            # Chaque migration dans sa propre transaction — nécessaire car
+            # Postgres interdit d'utiliser une nouvelle valeur d'enum
+            # (ALTER TYPE ... ADD VALUE) dans la transaction qui l'a créée.
+            transaction_per_migration=True,
         )
         with context.begin_transaction():
             context.run_migrations()

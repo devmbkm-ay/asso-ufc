@@ -130,6 +130,20 @@ class InviteTokenCheck(BaseModel):
     valid: bool
 
 
+class BulkInviteCreate(BaseModel):
+    emails: list[EmailStr] = Field(..., min_length=1, max_length=200)
+
+
+class SkippedInvite(BaseModel):
+    email:  str
+    reason: str
+
+
+class BulkInviteResult(BaseModel):
+    created: list[InviteRead]
+    skipped: list[SkippedInvite]
+
+
 class RegisterViaInvite(BaseModel):
     token:      str
     first_name: str = Field(..., min_length=1, max_length=100)

@@ -7,9 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.deps import CurrentMember, RequireAdmin
+from app.core.deps import CurrentMember, RequirePresidentOrAdmin
 from app.core import email as email_svc
-from app.schemas.member import InviteCreate, InviteRead, InviteTokenCheck
+from app.schemas.member import (
+    BulkInviteCreate, BulkInviteResult, InviteCreate, InviteRead,
+    InviteTokenCheck, SkippedInvite,
+)
 
 from models import Member, MemberInvite
 
@@ -37,7 +40,7 @@ def create_invite(
     payload: InviteCreate,
     current_member: CurrentMember,
     db: Session = Depends(get_db),
-    _=RequireAdmin,
+    _=RequirePresidentOrAdmin,
 ):
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(tz=timezone.utc) + timedelta(days=7)
@@ -59,11 +62,67 @@ def create_invite(
     return _invite_to_read(invite, db)
 
 
+@router.post("/bulk", response_model=BulkInviteResult, status_code=status.HTTP_201_CREATED,
+             summary="Générer des invitations en lot")
+def create_bulk_invites(
+    payload: BulkInviteCreate,
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+    _=RequirePresidentOrAdmin,
+):
+    now = datetime.now(tz=timezone.utc)
+    created: list[InviteRead] = []
+    skipped: list[SkippedInvite] = []
+    seen: set[str] = set()
+
+    for raw_email in payload.emails:
+        email = str(raw_email)
+        if email in seen:
+            skipped.append(SkippedInvite(email=email, reason="Doublon dans la liste"))
+            continue
+        seen.add(email)
+
+        if db.query(Member).filter(Member.email == email).first():
+            skipped.append(SkippedInvite(email=email, reason="Déjà membre"))
+            continue
+
+        existing = (
+            db.query(MemberInvite)
+            .filter(
+                MemberInvite.email == email,
+                MemberInvite.used_at.is_(None),
+                MemberInvite.expires_at > now,
+            )
+            .first()
+        )
+        if existing:
+            skipped.append(SkippedInvite(email=email, reason="Invitation déjà en cours"))
+            continue
+
+        invite = MemberInvite(
+            id=uuid4(),
+            email=email,
+            token=secrets.token_urlsafe(32),
+            invited_by=current_member.id,
+            expires_at=now + timedelta(days=7),
+        )
+        db.add(invite)
+        db.commit()
+        db.refresh(invite)
+
+        link = f"{settings.FRONTEND_URL}/rejoindre/{invite.token}"
+        email_svc.send_invite(invite.email, f"{current_member.first_name} {current_member.last_name}", link)
+
+        created.append(_invite_to_read(invite, db))
+
+    return BulkInviteResult(created=created, skipped=skipped)
+
+
 @router.get("", response_model=list[InviteRead], summary="Liste des invitations")
 def list_invites(
     current_member: CurrentMember,
     db: Session = Depends(get_db),
-    _=RequireAdmin,
+    _=RequirePresidentOrAdmin,
 ):
     invites = (
         db.query(MemberInvite)
@@ -88,7 +147,7 @@ def revoke_invite(
     token: str,
     current_member: CurrentMember,
     db: Session = Depends(get_db),
-    _=RequireAdmin,
+    _=RequirePresidentOrAdmin,
 ):
     invite = db.query(MemberInvite).filter(MemberInvite.token == token).first()
     if not invite:

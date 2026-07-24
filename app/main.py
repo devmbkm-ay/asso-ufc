@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from app.core.config import settings
 from app.core.tasks import start_scheduler, stop_scheduler
 from app.api.v1 import api_router
 
-UPLOAD_DIR = Path("/app/uploads")
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "uploads"))
 
 
 @asynccontextmanager

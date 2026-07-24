@@ -94,6 +94,10 @@ def require_roles(*role_names: RoleName):
 
 # Alias prêts à l'emploi — ajoutés comme paramètre de route avec "_=RequireAdmin"
 # FastAPI les résout avant d'exécuter la route, bloquant si le rôle est absent.
-RequireAdmin     = Depends(require_roles(RoleName.super_admin))
-RequireTreasurer = Depends(require_roles(RoleName.super_admin, RoleName.treasurer))
-RequireSecretary = Depends(require_roles(RoleName.super_admin, RoleName.secretary))
+# "president" hérite des permissions secretary + treasurer, plus le droit
+# d'inviter (RequirePresidentOrAdmin) — mais pas la gestion des rôles ni les
+# actions destructives, qui restent réservées à super_admin (RequireAdmin).
+RequireAdmin            = Depends(require_roles(RoleName.super_admin))
+RequirePresidentOrAdmin = Depends(require_roles(RoleName.super_admin, RoleName.president))
+RequireTreasurer        = Depends(require_roles(RoleName.super_admin, RoleName.treasurer, RoleName.president))
+RequireSecretary        = Depends(require_roles(RoleName.super_admin, RoleName.secretary, RoleName.president))
