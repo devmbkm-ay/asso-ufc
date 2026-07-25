@@ -57,6 +57,7 @@ class PaymentMethod(str, enum.Enum):
     bank_transfer = "bank_transfer"
     lydia         = "lydia"
     sumeria       = "sumeria"
+    wero          = "wero"
     other         = "other"
 
 
@@ -287,10 +288,14 @@ class Contribution(Base):
     member_id      = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True)
     amount         = Column(Numeric(10, 2), nullable=False)
     is_anonymous   = Column(Boolean, nullable=False, default=False)
+    method         = Column(Enum(PaymentMethod), nullable=False, default=PaymentMethod.other)
+    status         = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.pending, index=True)
+    reference      = Column(String(200))
+    recorded_by    = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
     contributed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     collecte = relationship("Collecte", back_populates="contributions")
-    member   = relationship("Member")
+    member   = relationship("Member", foreign_keys=[member_id])
 
 
 class MemberInvite(Base):
