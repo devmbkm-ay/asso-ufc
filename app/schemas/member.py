@@ -97,7 +97,7 @@ class MemberListItem(BaseModel):
 
 
 class RoleAssign(BaseModel):
-    role_name: str = Field(..., pattern="^(super_admin|treasurer|secretary|member)$")
+    role_name: str = Field(..., pattern="^(super_admin|president|treasurer|secretary|member)$")
 
 
 class PaginatedMembers(BaseModel):
