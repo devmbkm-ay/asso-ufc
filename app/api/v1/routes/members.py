@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import CurrentMember, RequireAdmin, RequireSecretary
+from app.core.deps import CurrentMember, RequireAdmin, RequirePresidentOrAdmin, RequireSecretary
 from app.core.security import hash_password
 from app.core import email as email_svc
 from app.schemas.member import (
@@ -115,10 +115,10 @@ def list_members(
     """
     Liste paginée des membres.
     Tous les membres authentifiés peuvent lister les membres actifs.
-    Secrétaire / super_admin : accès à tous les statuts.
+    Secrétaire / président / super_admin : accès à tous les statuts.
     """
     roles = set(_get_roles(db, current_member.id))
-    is_privileged = bool(roles.intersection({"super_admin", "secretary"}))
+    is_privileged = bool(roles.intersection({"super_admin", "secretary", "president"}))
 
     query = db.query(Member)
 
@@ -240,7 +240,7 @@ def get_member(
     if current_member.id != member_id:
         # Vérifie qu'il a un rôle suffisant
         roles = set(_get_roles(db, current_member.id))
-        if not roles.intersection({"super_admin", "secretary", "treasurer"}):
+        if not roles.intersection({"super_admin", "secretary", "treasurer", "president"}):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail="Accès non autorisé")
 
@@ -260,10 +260,10 @@ def update_member(
 ):
     """
     Un membre peut modifier son propre profil.
-    Les admins/secrétaires peuvent modifier n'importe quel profil.
+    Les admins/secrétaires/président peuvent modifier n'importe quel profil.
     """
     roles = set(_get_roles(db, current_member.id))
-    is_privileged = bool(roles.intersection({"super_admin", "secretary"}))
+    is_privileged = bool(roles.intersection({"super_admin", "secretary", "president"}))
 
     if current_member.id != member_id and not is_privileged:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
@@ -291,9 +291,9 @@ def update_member_status(
     payload: MemberStatusUpdate,
     current_member: CurrentMember,
     db: Session = Depends(get_db),
-    _: Member = RequireAdmin,
+    _: Member = RequirePresidentOrAdmin,
 ):
-    """Rôle requis : super_admin uniquement."""
+    """Rôle requis : super_admin ou président."""
     member = db.query(Member).filter(Member.id == member_id).first()
     if not member:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,

@@ -35,7 +35,7 @@ def _has_treasurer_role(db: Session, member_id) -> bool:
         .filter(MemberRole.member_id == member_id)
         .all()
     )
-    return any(r.name in [RoleName.super_admin, RoleName.treasurer] for r in roles)
+    return any(r.name in [RoleName.super_admin, RoleName.treasurer, RoleName.president] for r in roles)
 
 
 def _can_validate_payment(db: Session, member_id) -> bool:
@@ -45,7 +45,7 @@ def _can_validate_payment(db: Session, member_id) -> bool:
         .filter(MemberRole.member_id == member_id)
         .all()
     )
-    return any(r.name in [RoleName.super_admin, RoleName.treasurer, RoleName.secretary] for r in roles)
+    return any(r.name in [RoleName.super_admin, RoleName.treasurer, RoleName.secretary, RoleName.president] for r in roles)
 
 
 def _build_periods(plan: CotisationPlan) -> list[tuple[int | None, int]]:
@@ -392,7 +392,7 @@ def validate_declared_payment(
     db: Session = Depends(get_db),
 ):
     if not _can_validate_payment(db, current_member.id):
-        raise HTTPException(status_code=403, detail="Réservé au trésorier, secrétaire ou super-admin")
+        raise HTTPException(status_code=403, detail="Réservé au trésorier, secrétaire, président ou super-admin")
 
     payment = db.query(Payment).filter(
         Payment.id == payment_id,
@@ -421,7 +421,7 @@ def reject_declared_payment(
     db: Session = Depends(get_db),
 ):
     if not _can_validate_payment(db, current_member.id):
-        raise HTTPException(status_code=403, detail="Réservé au trésorier, secrétaire ou super-admin")
+        raise HTTPException(status_code=403, detail="Réservé au trésorier, secrétaire, président ou super-admin")
 
     payment = db.query(Payment).filter(
         Payment.id == payment_id,
