@@ -74,7 +74,47 @@ def _contribution_to_read(
     )
 
 
-def _collecte_to_read(collecte: Collecte, db: Session) -> CollecteRead:
+# Ne compte que les contributions déclarées ou confirmées : "pending" est une
+# intention de payer, pas de l'argent reçu, donc ne doit pas gonfler le total
+# public affiché.
+COUNTED_STATUSES = (PaymentStatus.declared, PaymentStatus.confirmed)
+
+
+def _collectes_aggregates(db: Session, collecte_ids: list[UUID]) -> dict[UUID, tuple[Decimal, int]]:
+    """
+    Un seul aller-retour DB pour le total collecté + le nombre de contributeurs
+    de plusieurs collectes à la fois, au lieu d'interroger chaque collecte
+    individuellement (2 requêtes par ligne) comme le faisait list_collectes.
+    """
+    if not collecte_ids:
+        return {}
+    rows = (
+        db.query(
+            Contribution.collecte_id,
+            func.coalesce(func.sum(Contribution.amount), Decimal("0")),
+            func.count(distinct(Contribution.member_id)),
+        )
+        .filter(
+            Contribution.collecte_id.in_(collecte_ids),
+            Contribution.status.in_(COUNTED_STATUSES),
+        )
+        .group_by(Contribution.collecte_id)
+        .all()
+    )
+    return {cid: (total, count) for cid, total, count in rows}
+
+
+def _collecte_to_read(
+    collecte: Collecte,
+    db: Session,
+    agg: dict[UUID, tuple[Decimal, int]] | None = None,
+) -> CollecteRead:
+    """
+    agg permet de passer un total/count déjà calculé en masse (cf. list_collectes).
+    Si absent, retombe sur une requête par collecte — utilisé par les endpoints
+    qui manipulent une seule collecte (create/get/update/close/archive), où une
+    requête individuelle est normale et ne mérite pas l'agrégat en masse.
+    """
     today = date.today()
 
     if collecte.is_closed:
@@ -88,24 +128,22 @@ def _collecte_to_read(collecte: Collecte, db: Session) -> CollecteRead:
 
     is_active = status == "active"
 
-    # Ne compte que les contributions déclarées ou confirmées : "pending"
-    # est une intention de payer, pas de l'argent reçu, donc ne doit pas
-    # gonfler le total public affiché.
-    counted_statuses = (PaymentStatus.declared, PaymentStatus.confirmed)
+    if agg is not None:
+        total, count = agg.get(collecte.id, (Decimal("0"), 0))
+    else:
+        total = db.query(
+            func.coalesce(func.sum(Contribution.amount), Decimal("0"))
+        ).filter(
+            Contribution.collecte_id == collecte.id,
+            Contribution.status.in_(COUNTED_STATUSES),
+        ).scalar()
 
-    total = db.query(
-        func.coalesce(func.sum(Contribution.amount), Decimal("0"))
-    ).filter(
-        Contribution.collecte_id == collecte.id,
-        Contribution.status.in_(counted_statuses),
-    ).scalar()
-
-    count = db.query(
-        func.count(distinct(Contribution.member_id))
-    ).filter(
-        Contribution.collecte_id == collecte.id,
-        Contribution.status.in_(counted_statuses),
-    ).scalar()
+        count = db.query(
+            func.count(distinct(Contribution.member_id))
+        ).filter(
+            Contribution.collecte_id == collecte.id,
+            Contribution.status.in_(COUNTED_STATUSES),
+        ).scalar()
 
     return CollecteRead(
         id=collecte.id,
@@ -171,17 +209,25 @@ def list_collectes(
     active_only: bool = False,
     include_archived: bool = False,
 ):
-    """Retourne toutes les collectes. Par défaut exclut les archivées."""
+    """
+    Retourne toutes les collectes. Par défaut exclut les archivées.
+    `active_only` filtre en base (et non plus après coup en Python) pour ne
+    pas construire puis jeter les CollecteRead des collectes exclues.
+    """
+    today = date.today()
     query = db.query(Collecte)
     if not include_archived:
         query = query.filter(Collecte.is_archived == False)  # noqa: E712
-    query = query.order_by(Collecte.created_at.desc())
-    rows = query.all()
-
-    result = [_collecte_to_read(c, db) for c in rows]
     if active_only:
-        result = [c for c in result if c.is_active]
-    return result
+        query = query.filter(
+            Collecte.is_closed == False,  # noqa: E712
+            Collecte.start_date <= today,
+            Collecte.end_date >= today,
+        )
+    rows = query.order_by(Collecte.created_at.desc()).all()
+
+    agg = _collectes_aggregates(db, [c.id for c in rows])
+    return [_collecte_to_read(c, db, agg) for c in rows]
 
 
 @router.get(
