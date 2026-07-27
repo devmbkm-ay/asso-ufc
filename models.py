@@ -266,6 +266,29 @@ class LoginEvent(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class BeneficiaryDesignation(Base):
+    # Personne (pas forcément membre) désignée par un membre pour bénéficier
+    # d'une collecte de solidarité en cas de décès — pour les membres qui ont
+    # déjà perdu leurs parents proches et ne peuvent donc pas bénéficier du
+    # mécanisme habituel (collecte déclenchée au décès d'un proche). Limite de
+    # 2 par membre, vérifiée en Python à la création (cf. beneficiaries.py),
+    # pas en contrainte SQL — cohérent avec le reste des règles métier ici.
+    __tablename__ = "beneficiary_designations"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id    = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False)
+    full_name    = Column(String(200), nullable=False)
+    relation     = Column(String(100), nullable=False)
+    contact      = Column(String(200), nullable=False)
+    status       = Column(String(20), nullable=False, default="pending")  # pending|validated|rejected|revoked
+    validated_by = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    validated_at = Column(DateTime(timezone=True), nullable=True)
+    # Délai de carence avant qu'une désignation validée soit utilisable pour
+    # créer une collecte — bloque les substitutions de dernière minute.
+    active_from  = Column(Date, nullable=True)
+    created_at   = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class Collecte(Base):
     # Collecte de solidarité déclenchée au décès d'un proche d'un membre.
     __tablename__ = "collectes"
