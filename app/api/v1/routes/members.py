@@ -1,10 +1,10 @@
 import math
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import inspect as sa_inspect
+from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -18,9 +18,9 @@ from app.schemas.member import (
 )
 
 from models import (
-    AuditLog, CotisationFrequency, CotisationPlan, Member, MemberRole,
-    Notification, NotificationType, Payment, PaymentMethod, PaymentStatus,
-    Role, RoleName,
+    AuditLog, CotisationFrequency, CotisationPlan, LoginEvent, Member,
+    MemberRole, Notification, NotificationType, Payment, PaymentMethod,
+    PaymentStatus, Role, RoleName,
 )
 
 router = APIRouter(prefix="/members", tags=["Membres"])
@@ -92,13 +92,28 @@ def _audit(db: Session, actor_id: UUID, action: str, record_id: UUID, diff: dict
     ))
 
 
-def _member_to_read(member: Member, roles: list[str]) -> MemberRead:
+def _member_to_read(member: Member, roles: list[str], last_login_at=None) -> MemberRead:
     cols = {
         attr.key: getattr(member, attr.key)
         for attr in sa_inspect(member.__class__).mapper.column_attrs
     }
     cols["roles"] = roles
+    cols["last_login_at"] = last_login_at
     return MemberRead.model_validate(cols)
+
+
+def _last_logins(db: Session, member_ids: list[UUID]) -> dict[UUID, datetime]:
+    """Dernière connexion par membre, en un seul aller-retour DB pour toute la page —
+    évite une requête par ligne comme pour les agrégats de collectes."""
+    if not member_ids:
+        return {}
+    rows = (
+        db.query(LoginEvent.member_id, func.max(LoginEvent.created_at))
+        .filter(LoginEvent.member_id.in_(member_ids))
+        .group_by(LoginEvent.member_id)
+        .all()
+    )
+    return dict(rows)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -146,6 +161,8 @@ def list_members(
         .all()
     )
 
+    last_logins = _last_logins(db, [m.id for m in members])
+
     items = []
     for m in members:
         cols = {
@@ -153,6 +170,7 @@ def list_members(
             for attr in sa_inspect(m.__class__).mapper.column_attrs
         }
         cols["roles"] = _get_roles(db, m.id)
+        cols["last_login_at"] = last_logins.get(m.id)
         items.append(MemberListItem.model_validate(cols))
 
     return PaginatedMembers(
@@ -248,7 +266,8 @@ def get_member(
     if not member:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Membre introuvable")
-    return _member_to_read(member, _get_roles(db, member.id))
+    last_login_at = _last_logins(db, [member.id]).get(member.id)
+    return _member_to_read(member, _get_roles(db, member.id), last_login_at)
 
 
 @router.patch("/{member_id}", response_model=MemberRead, summary="Modifier un membre")

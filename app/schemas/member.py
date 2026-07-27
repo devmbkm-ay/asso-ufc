@@ -79,6 +79,7 @@ class MemberRead(MemberBase):
     created_at: datetime
     updated_at: datetime
     roles:      list[str] = []
+    last_login_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
@@ -92,6 +93,7 @@ class MemberListItem(BaseModel):
     status:     str
     joined_at:  date
     roles:      list[str] = []
+    last_login_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
