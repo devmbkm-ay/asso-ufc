@@ -91,6 +91,9 @@ class TreasurerDashboard(BaseModel):
     revenue_this_month:  Decimal
     revenue_ytd:         Decimal
     pending_count:       int
+    active_members_7d:   int
+    active_members_30d:  int
+    never_logged_in:     int
 
 
 # ── Grille mensuelle ──────────────────────────────────────────────────────────

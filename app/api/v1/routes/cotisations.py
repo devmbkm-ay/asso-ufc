@@ -1,14 +1,14 @@
 import csv
 import io
 import math
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract
+from sqlalchemy import func, extract, distinct
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.database import get_db
@@ -19,8 +19,8 @@ from app.schemas.cotisation import (
     PaymentRead, PaymentUpdate, TreasurerDashboard,
 )
 from models import (
-    CotisationFrequency, CotisationPlan, Member, MemberRole, MemberStatus,
-    Payment, PaymentMethod, PaymentStatus, Role, RoleName,
+    CotisationFrequency, CotisationPlan, LoginEvent, Member, MemberRole,
+    MemberStatus, Payment, PaymentMethod, PaymentStatus, Role, RoleName,
 )
 
 router = APIRouter(tags=["Cotisations"])
@@ -522,11 +522,27 @@ def treasurer_dashboard(
         Payment.status.in_([PaymentStatus.pending, PaymentStatus.declared]),
     ).count()
 
+    # Fréquence d'usage : combien de membres se sont réellement connectés
+    # récemment, vs. jamais — pour repérer qui relancer.
+    now = datetime.now(timezone.utc)
+    active_members_7d = db.query(func.count(distinct(LoginEvent.member_id))).filter(
+        LoginEvent.created_at >= now - timedelta(days=7),
+    ).scalar() or 0
+    active_members_30d = db.query(func.count(distinct(LoginEvent.member_id))).filter(
+        LoginEvent.created_at >= now - timedelta(days=30),
+    ).scalar() or 0
+    never_logged_in = total_members - (
+        db.query(func.count(distinct(LoginEvent.member_id))).scalar() or 0
+    )
+
     return TreasurerDashboard(
         total_members=total_members,
         active_members=active_members,
         paid_this_month=paid_this_month,
         unpaid_this_month=max(unpaid_this_month, 0),
+        active_members_7d=active_members_7d,
+        active_members_30d=active_members_30d,
+        never_logged_in=max(never_logged_in, 0),
         revenue_this_month=revenue_this_month,
         revenue_ytd=revenue_ytd,
         pending_count=pending_count,

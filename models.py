@@ -255,6 +255,17 @@ class AuditLog(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class LoginEvent(Base):
+    # Une ligne par connexion réussie — sert à mesurer la fréquence d'usage
+    # réelle des membres (actifs récents, jamais connectés) pour le dashboard,
+    # distinct d'AuditLog qui journalise des mutations de données, pas des accès.
+    __tablename__ = "login_events"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id  = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class Collecte(Base):
     # Collecte de solidarité déclenchée au décès d'un proche d'un membre.
     __tablename__ = "collectes"

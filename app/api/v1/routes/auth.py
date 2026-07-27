@@ -21,8 +21,8 @@ from app.schemas.member import (
 )
 
 from models import (
-    JoinCode, Member, MemberInvite, MemberRole, MemberStatus, Notification,
-    NotificationType, PasswordReset, Role, RoleName,
+    JoinCode, LoginEvent, Member, MemberInvite, MemberRole, MemberStatus,
+    Notification, NotificationType, PasswordReset, Role, RoleName,
 )
 
 RESET_TOKEN_TTL = timedelta(hours=1)
@@ -71,6 +71,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         )
 
     roles = _get_member_roles(db, member.id)
+
+    db.add(LoginEvent(id=uuid4(), member_id=member.id))
+    db.commit()
+
     return TokenResponse(
         access_token=create_access_token(member.id, roles),
         refresh_token=create_refresh_token(member.id),
