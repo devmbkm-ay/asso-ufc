@@ -192,6 +192,7 @@ def create_collecte(
         end_date=payload.start_date + timedelta(days=DURATION_DAYS),
         category=payload.category,
         created_by=current_member.id,
+        beneficiary_designation_id=payload.beneficiary_designation_id,
     )
     db.add(collecte)
     db.commit()

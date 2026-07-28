@@ -113,6 +113,7 @@ def list_beneficiaries(
     status_filter: Optional[str] = Query(
         None, alias="status", pattern="^(pending|validated|rejected|revoked)$",
     ),
+    member_id: Optional[UUID] = Query(None),
     _=RequirePresidentOrAdmin,
 ):
     """Rôles requis : super_admin, président. Réservé à l'instruction des
@@ -120,6 +121,8 @@ def list_beneficiaries(
     q = db.query(BeneficiaryDesignation)
     if status_filter:
         q = q.filter(BeneficiaryDesignation.status == status_filter)
+    if member_id:
+        q = q.filter(BeneficiaryDesignation.member_id == member_id)
     rows = q.order_by(BeneficiaryDesignation.created_at).all()
     return [_to_read(d, db) for d in rows]
 

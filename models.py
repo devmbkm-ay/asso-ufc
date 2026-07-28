@@ -308,9 +308,33 @@ class Collecte(Base):
     archived_at      = Column(DateTime(timezone=True), nullable=True)
     category         = Column(String(50), nullable=True)  # deces|mariage|naissance|maladie|autre
     created_by       = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    # Désignation à l'origine de cette collecte, si créée depuis un
+    # signalement de décès validé (sens A ou B, cf. death_reports) — traçabilité,
+    # pas utilisé pour recalculer quoi que ce soit.
+    beneficiary_designation_id = Column(UUID(as_uuid=True), ForeignKey("beneficiary_designations.id"), nullable=True)
     created_at       = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     contributions = relationship("Contribution", back_populates="collecte")
+
+
+class DeathReport(Base):
+    # Signalement in-app du décès d'un membre (sens A) ou d'une personne
+    # désignée par un membre encore vivant (sens B) — vise exactement une
+    # des deux cibles, jamais les deux (contrainte appliquée côté Pydantic,
+    # cf. app/schemas/death_report.py). Un admin/président confirme ou rejette
+    # humainement avant qu'une collecte ne soit créée manuellement via le flow
+    # existant — voir app/api/v1/routes/death_reports.py.
+    __tablename__ = "death_reports"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id      = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    designation_id = Column(UUID(as_uuid=True), ForeignKey("beneficiary_designations.id"), nullable=True)
+    reported_by    = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False)
+    note           = Column(Text, nullable=True)
+    status         = Column(String(20), nullable=False, default="pending")  # pending|confirmed|dismissed
+    reviewed_by    = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
+    reviewed_at    = Column(DateTime(timezone=True), nullable=True)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class Contribution(Base):

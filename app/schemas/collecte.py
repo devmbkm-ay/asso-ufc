@@ -17,6 +17,9 @@ class CollecteCreate(BaseModel):
     goal_amount:      Optional[Decimal] = Field(None, ge=1)
     start_date:       date
     category:         Optional[str]  = None
+    # Renseigné quand la collecte répond à un signalement de décès validé
+    # (sens A ou B) — pure traçabilité, cf. app/api/v1/routes/death_reports.py.
+    beneficiary_designation_id: Optional[UUID] = None
 
 
 class CollecteUpdate(BaseModel):
