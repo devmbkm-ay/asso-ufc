@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequirePresidentOrAdmin
+from app.core.notifications import notify_member
 from app.schemas.death_report import DeathReportCreate, DeathReportRead
 from models import BeneficiaryDesignation, DeathReport, Member, MemberRole, Role, RoleName
 
@@ -148,6 +149,9 @@ def confirm_death_report(
     d.status = "confirmed"
     d.reviewed_by = current_member.id
     d.reviewed_at = datetime.now(timezone.utc)
+    read = _to_read(d, db)
+    notify_member(db, d.reported_by, "death_report_confirmed",
+                  f"Le signalement concernant {read.target_label} a été confirmé.", "/mon-espace/beneficiaires")
     db.commit()
     db.refresh(d)
     return _to_read(d, db)

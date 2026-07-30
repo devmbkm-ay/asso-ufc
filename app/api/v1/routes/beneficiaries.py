@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequirePresidentOrAdmin
+from app.core.notifications import notify_member
 from app.schemas.beneficiary import BeneficiaryCreate, BeneficiaryRead
 from models import BeneficiaryDesignation, Member
 
@@ -146,6 +147,8 @@ def validate_beneficiary(
     d.validated_by = current_member.id
     d.validated_at = datetime.now(timezone.utc)
     d.active_from = date.today() + timedelta(days=GRACE_PERIOD_DAYS)
+    notify_member(db, d.member_id, "designation_validated",
+                  f"Votre désignation de {d.full_name} a été validée.", "/mon-espace/beneficiaires")
     db.commit()
     db.refresh(d)
     return _to_read(d, db)
@@ -169,6 +172,8 @@ def reject_beneficiary(
     d.status = "rejected"
     d.validated_by = current_member.id
     d.validated_at = datetime.now(timezone.utc)
+    notify_member(db, d.member_id, "designation_rejected",
+                  f"Votre désignation de {d.full_name} a été rejetée.", "/mon-espace/beneficiaires")
     db.commit()
     db.refresh(d)
     return _to_read(d, db)

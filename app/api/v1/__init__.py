@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1.routes import (
     auth, members, cotisations, events, notifications, collectes, upload,
-    invites, join, beneficiaries, death_reports,
+    invites, join, beneficiaries, death_reports, member_notifications,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -16,3 +16,4 @@ api_router.include_router(invites.router)
 api_router.include_router(join.router)
 api_router.include_router(beneficiaries.router)
 api_router.include_router(death_reports.router)
+api_router.include_router(member_notifications.router)

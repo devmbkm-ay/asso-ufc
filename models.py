@@ -317,6 +317,21 @@ class Collecte(Base):
     contributions = relationship("Contribution", back_populates="collecte")
 
 
+class MemberNotification(Base):
+    # Flux in-app à statut lu/non-lu, distinct de `Notification` (journal
+    # d'emails sortants) — voir app/core/notifications.py pour l'aide de
+    # création utilisée par les routes qui déclenchent une notif membre.
+    __tablename__ = "member_notifications"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id  = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False)
+    type       = Column(String(30), nullable=False)
+    message    = Column(String(300), nullable=False)
+    link       = Column(String(300), nullable=True)
+    read       = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class DeathReport(Base):
     # Signalement in-app du décès d'un membre (sens A) ou d'une personne
     # désignée par un membre encore vivant (sens B) — vise exactement une
