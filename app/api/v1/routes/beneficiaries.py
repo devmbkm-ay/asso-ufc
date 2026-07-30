@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequirePresidentOrAdmin
-from app.core.notifications import notify_member
+from app.core.notifications import notify_admins, notify_member
 from app.schemas.beneficiary import BeneficiaryCreate, BeneficiaryRead
 from models import BeneficiaryDesignation, Member
 
@@ -84,6 +84,9 @@ def create_my_beneficiary(
         status="pending",
     )
     db.add(d)
+    notify_admins(db, "designation_submitted",
+                  f"{current_member.first_name} {current_member.last_name} a désigné {d.full_name} comme bénéficiaire.",
+                  "/beneficiaires")
     db.commit()
     db.refresh(d)
     return _to_read(d, db)

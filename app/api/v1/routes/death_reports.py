@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequirePresidentOrAdmin
-from app.core.notifications import notify_member
+from app.core.notifications import notify_admins, notify_member
 from app.schemas.death_report import DeathReportCreate, DeathReportRead
 from models import BeneficiaryDesignation, DeathReport, Member, MemberRole, Role, RoleName
 
@@ -110,7 +110,12 @@ def create_death_report(
     db.add(d)
     db.commit()
     db.refresh(d)
-    return _to_read(d, db)
+    read = _to_read(d, db)
+    notify_admins(db, "death_report_submitted",
+                  f"{read.reporter_name} a signalé un décès à instruire : {read.target_label}.",
+                  "/signalements-deces")
+    db.commit()
+    return read
 
 
 @router.get("", response_model=list[DeathReportRead],
