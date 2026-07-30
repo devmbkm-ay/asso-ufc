@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequireAdmin, RequireSecretary
+from app.core.notifications import notify_member
 from app.core.reconciliation import generate_reference_code
 from app.schemas.collecte import (
     CollecteCreate, CollecteUpdate, CollecteRead, ContributionCreate, ContributionRead,
@@ -382,6 +383,12 @@ def validate_declared_contribution(
         )
     contribution.status = PaymentStatus.confirmed
     contribution.recorded_by = current_member.id
+
+    collecte = db.query(Collecte).filter(Collecte.id == collecte_id).first()
+    notify_member(db, contribution.member_id, "contribution_validated",
+                  f"Votre contribution de {contribution.amount} € à « {collecte.title if collecte else 'la collecte'} » a été validée.",
+                  f"/mon-espace/collectes/{collecte_id}")
+
     db.commit()
     db.refresh(contribution)
     member = db.query(Member).filter(Member.id == contribution.member_id).first()
@@ -415,6 +422,12 @@ def reject_declared_contribution(
             detail="Contribution introuvable ou non déclarée",
         )
     contribution.status = PaymentStatus.pending
+
+    collecte = db.query(Collecte).filter(Collecte.id == collecte_id).first()
+    notify_member(db, contribution.member_id, "contribution_rejected",
+                  f"Votre contribution déclarée de {contribution.amount} € à « {collecte.title if collecte else 'la collecte'} » n'a pas été validée — elle repasse en attente.",
+                  f"/mon-espace/collectes/{collecte_id}")
+
     db.commit()
     db.refresh(contribution)
     member = db.query(Member).filter(Member.id == contribution.member_id).first()

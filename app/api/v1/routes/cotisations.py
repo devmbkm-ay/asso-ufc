@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequireAdmin, RequireTreasurer
+from app.core.notifications import notify_member
 from app.schemas.cotisation import (
     CotisationPlanCreate, CotisationPlanRead, CotisationPlanUpdate,
     MonthCell, PaginatedPayments, PaymentCreate, PaymentGridRow,
@@ -408,6 +409,9 @@ def validate_declared_payment(
     if member and member.status == MemberStatus.inactive:
         member.status = MemberStatus.active
 
+    notify_member(db, payment.member_id, "payment_validated",
+                  f"Votre cotisation de {payment.amount} € a été validée.", "/mon-espace/ma-cotisation")
+
     db.commit()
     db.refresh(payment)
     return _payment_to_read(payment)
@@ -431,6 +435,10 @@ def reject_declared_payment(
         raise HTTPException(status_code=404, detail="Paiement introuvable ou non déclaré")
 
     payment.status = PaymentStatus.pending
+
+    notify_member(db, payment.member_id, "payment_rejected",
+                  f"Votre déclaration de cotisation de {payment.amount} € n'a pas été validée — elle repasse en attente.",
+                  "/mon-espace/ma-cotisation")
 
     db.commit()
     db.refresh(payment)

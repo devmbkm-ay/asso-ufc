@@ -175,6 +175,9 @@ def dismiss_death_report(
     d.status = "dismissed"
     d.reviewed_by = current_member.id
     d.reviewed_at = datetime.now(timezone.utc)
+    read = _to_read(d, db)
+    notify_member(db, d.reported_by, "death_report_dismissed",
+                  f"Le signalement concernant {read.target_label} a été rejeté.", "/mon-espace/beneficiaires")
     db.commit()
     db.refresh(d)
     return _to_read(d, db)
