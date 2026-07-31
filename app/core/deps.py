@@ -55,6 +55,11 @@ def get_current_member(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Compte en attente d'approbation",
         )
+    if member.status == "deceased":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ce compte est clôturé",
+        )
     return member
 
 

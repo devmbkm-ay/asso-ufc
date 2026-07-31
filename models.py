@@ -36,6 +36,10 @@ class MemberStatus(str, enum.Enum):
     # Compte créé via un lien/code d'adhésion public, en attente de
     # validation par un admin avant de devenir un membre à part entière.
     pending   = "pending"
+    # Posé automatiquement à la confirmation d'un signalement de décès
+    # sens A (cf. app/api/v1/routes/death_reports.py) — jamais pour un
+    # signalement sens B, qui concerne une personne désignée, pas le membre.
+    deceased  = "deceased"
 
 
 class RoleName(str, enum.Enum):

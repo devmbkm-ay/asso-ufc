@@ -69,7 +69,7 @@ class MemberUpdate(BaseModel):
 
 
 class MemberStatusUpdate(BaseModel):
-    status: str = Field(..., pattern="^(active|inactive|suspended|honorary)$")
+    status: str = Field(..., pattern="^(active|inactive|suspended|honorary|deceased)$")
 
 
 class MemberRead(MemberBase):

@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequirePresidentOrAdmin
-from app.core.notifications import notify_admins, notify_member
+from app.core.notifications import notify_member
 from app.schemas.death_report import DeathReportCreate, DeathReportRead
-from models import BeneficiaryDesignation, DeathReport, Member, MemberRole, Role, RoleName
+from models import BeneficiaryDesignation, DeathReport, Member, MemberRole, MemberStatus, Role, RoleName
 
 router = APIRouter(prefix="/death-reports", tags=["Signalements"])
 
@@ -110,12 +110,7 @@ def create_death_report(
     db.add(d)
     db.commit()
     db.refresh(d)
-    read = _to_read(d, db)
-    notify_admins(db, "death_report_submitted",
-                  f"{read.reporter_name} a signalé un décès à instruire : {read.target_label}.",
-                  "/signalements-deces")
-    db.commit()
-    return read
+    return _to_read(d, db)
 
 
 @router.get("", response_model=list[DeathReportRead],
@@ -154,6 +149,15 @@ def confirm_death_report(
     d.status = "confirmed"
     d.reviewed_by = current_member.id
     d.reviewed_at = datetime.now(timezone.utc)
+
+    # Sens A uniquement : le décès concerne le membre lui-même. Sens B
+    # (designation_id) ne touche jamais Member.status — la personne décédée
+    # n'est pas le membre.
+    if d.member_id:
+        deceased_member = db.query(Member).filter(Member.id == d.member_id).first()
+        if deceased_member:
+            deceased_member.status = MemberStatus.deceased
+
     read = _to_read(d, db)
     notify_member(db, d.reported_by, "death_report_confirmed",
                   f"Le signalement concernant {read.target_label} a été confirmé.", "/mon-espace/beneficiaires")
