@@ -68,6 +68,7 @@ class ContributionRead(BaseModel):
     # GET /members/{id} malgré member_name masqué.
     member_id:      Optional[UUID] = None
     member_name:    str
+    member_deceased: bool = False
     amount:         Decimal
     is_anonymous:   bool
     method:         str

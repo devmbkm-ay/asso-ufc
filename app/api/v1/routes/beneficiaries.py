@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.deps import CurrentMember, RequirePresidentOrAdmin
 from app.core.notifications import notify_member
 from app.schemas.beneficiary import BeneficiaryCreate, BeneficiaryRead
-from models import BeneficiaryDesignation, Member
+from models import BeneficiaryDesignation, DeathReport, Member, MemberStatus
 
 router = APIRouter(prefix="/beneficiaries", tags=["Bénéficiaires"])
 
@@ -22,13 +22,19 @@ ACTIVE_STATUSES = ("pending", "validated")
 
 def _to_read(d: BeneficiaryDesignation, db: Session) -> BeneficiaryRead:
     member = db.query(Member).filter(Member.id == d.member_id).first()
+    person_deceased = db.query(DeathReport).filter(
+        DeathReport.designation_id == d.id,
+        DeathReport.status == "confirmed",
+    ).first() is not None
     return BeneficiaryRead(
         id=d.id,
         member_id=d.member_id,
         member_name=f"{member.first_name} {member.last_name}" if member else "—",
+        member_deceased=bool(member and member.status == MemberStatus.deceased),
         full_name=d.full_name,
         relation=d.relation,
         contact=d.contact,
+        person_deceased=person_deceased,
         status=d.status,
         validated_by=d.validated_by,
         validated_at=d.validated_at,

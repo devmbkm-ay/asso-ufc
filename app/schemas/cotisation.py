@@ -59,6 +59,7 @@ class PaymentRead(BaseModel):
     id:                 UUID
     member_id:          UUID
     member_name:        str
+    member_deceased:    bool = False
     cotisation_plan_id: UUID
     plan_label:         str
     amount:             Decimal

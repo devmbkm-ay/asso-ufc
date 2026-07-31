@@ -15,9 +15,11 @@ class BeneficiaryRead(BaseModel):
     id:             UUID
     member_id:      UUID
     member_name:    str
+    member_deceased: bool = False
     full_name:      str
     relation:       str
     contact:        str
+    person_deceased: bool = False
     status:         str
     validated_by:   Optional[UUID] = None
     validated_at:   Optional[datetime] = None

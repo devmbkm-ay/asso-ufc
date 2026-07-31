@@ -134,3 +134,46 @@ def test_new_report_allowed_after_dismiss(client, seed):
 
     r = client.post("/api/v1/death-reports", json={"member_id": str(seed["member2"])}, headers=h)
     assert r.status_code == 201
+
+
+def test_confirmed_sens_b_flags_person_deceased_on_designation(client, seed):
+    designation_id = _make_designation(client, seed, "member1")
+
+    r = client.get("/api/v1/beneficiaries", headers=auth_headers(seed["super_admin"]))
+    before = next(d for d in r.json() if d["id"] == designation_id)
+    assert before["person_deceased"] is False
+
+    r = client.post("/api/v1/death-reports", json={"designation_id": designation_id},
+                     headers=auth_headers(seed["member1"]))
+    report_id = r.json()["id"]
+    client.patch(f"/api/v1/death-reports/{report_id}/confirm", headers=auth_headers(seed["super_admin"]))
+
+    r = client.get("/api/v1/beneficiaries", headers=auth_headers(seed["super_admin"]))
+    after = next(d for d in r.json() if d["id"] == designation_id)
+    assert after["person_deceased"] is True
+
+
+def test_dismissed_sens_b_does_not_flag_person_deceased(client, seed):
+    designation_id = _make_designation(client, seed, "member1")
+    r = client.post("/api/v1/death-reports", json={"designation_id": designation_id},
+                     headers=auth_headers(seed["member1"]))
+    report_id = r.json()["id"]
+    client.patch(f"/api/v1/death-reports/{report_id}/dismiss", headers=auth_headers(seed["super_admin"]))
+
+    r = client.get("/api/v1/beneficiaries", headers=auth_headers(seed["super_admin"]))
+    designation = next(d for d in r.json() if d["id"] == designation_id)
+    assert designation["person_deceased"] is False
+
+
+def test_confirmed_sens_a_flags_member_deceased_on_their_own_designations(client, seed):
+    designation_id = _make_designation(client, seed, "member1")
+
+    r = client.post("/api/v1/death-reports", json={"member_id": str(seed["member1"])},
+                     headers=auth_headers(seed["member2"]))
+    report_id = r.json()["id"]
+    client.patch(f"/api/v1/death-reports/{report_id}/confirm", headers=auth_headers(seed["super_admin"]))
+
+    r = client.get("/api/v1/beneficiaries", headers=auth_headers(seed["super_admin"]))
+    designation = next(d for d in r.json() if d["id"] == designation_id)
+    assert designation["member_deceased"] is True
+    assert designation["person_deceased"] is False

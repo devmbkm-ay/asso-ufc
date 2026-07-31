@@ -102,3 +102,29 @@ def test_deceased_member_never_auto_reactivated(client, seed, db):
 
     r = client.get("/api/v1/members", params={"status": "deceased"}, headers=auth_headers(seed["super_admin"]))
     assert any(m["id"] == str(seed["member2"]) for m in r.json()["items"])
+
+
+def test_payment_flags_deceased_member(client, seed, db):
+    r = client.patch(f"/api/v1/members/{seed['member2']}/status", json={"status": "deceased"},
+                      headers=auth_headers(seed["super_admin"]))
+    assert r.status_code == 200
+
+    plan_id = _make_one_time_plan(client, seed)
+    payment = Payment(
+        id=uuid.uuid4(),
+        member_id=seed["member2"],
+        cotisation_plan_id=uuid.UUID(plan_id),
+        amount=15,
+        payment_date=date.today(),
+        period_month=None,
+        period_year=date.today().year,
+        method=PaymentMethod.cash,
+        status=PaymentStatus.declared,
+    )
+    db.add(payment)
+    db.commit()
+
+    r = client.get("/api/v1/payments", params={"member_id": str(seed["member2"]), "size": 50},
+                    headers=auth_headers(seed["treasurer"]))
+    found = next(p for p in r.json()["items"] if p["id"] == str(payment.id))
+    assert found["member_deceased"] is True

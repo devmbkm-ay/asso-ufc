@@ -113,6 +113,7 @@ def _payment_to_read(p: Payment) -> PaymentRead:
         id=p.id,
         member_id=p.member_id,
         member_name=f"{p.member.first_name} {p.member.last_name}",
+        member_deceased=p.member.status == MemberStatus.deceased,
         cotisation_plan_id=p.cotisation_plan_id,
         plan_label=p.cotisation_plan.label,
         amount=p.amount,

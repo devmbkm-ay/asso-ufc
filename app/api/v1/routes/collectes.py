@@ -14,7 +14,7 @@ from app.core.reconciliation import generate_reference_code
 from app.schemas.collecte import (
     CollecteCreate, CollecteUpdate, CollecteRead, ContributionCreate, ContributionRead,
 )
-from models import Collecte, Contribution, Member, MemberRole, PaymentMethod, PaymentStatus, Role, RoleName
+from models import Collecte, Contribution, Member, MemberRole, MemberStatus, PaymentMethod, PaymentStatus, Role, RoleName
 
 router = APIRouter(prefix="/collectes", tags=["Collectes"])
 
@@ -66,6 +66,7 @@ def _contribution_to_read(
         collecte_id=contribution.collecte_id,
         member_id=member.id if reveal else None,
         member_name=f"{member.first_name} {member.last_name}" if reveal else "Membre anonyme",
+        member_deceased=reveal and member.status == MemberStatus.deceased,
         amount=contribution.amount,
         is_anonymous=contribution.is_anonymous,
         method=contribution.method.value,

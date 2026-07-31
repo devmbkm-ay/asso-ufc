@@ -91,3 +91,19 @@ def test_minimum_amount_enforced(client, seed):
     r = client.post(f"/api/v1/collectes/{collecte_id}/contributions",
                      json={"amount": 10, "method": "cash"}, headers=auth_headers(seed["member1"]))
     assert r.status_code == 400
+
+
+def test_contribution_flags_deceased_member(client, seed):
+    collecte_id = _make_collecte(client, seed)
+    r = client.post(f"/api/v1/collectes/{collecte_id}/contributions",
+                     json={"amount": 20, "method": "cash"}, headers=auth_headers(seed["member1"]))
+    contribution_id = r.json()["id"]
+    assert r.json()["member_deceased"] is False
+
+    r = client.post("/api/v1/death-reports", json={"member_id": str(seed["member1"])},
+                     headers=auth_headers(seed["member2"]))
+    client.patch(f"/api/v1/death-reports/{r.json()['id']}/confirm", headers=auth_headers(seed["super_admin"]))
+
+    r = client.get(f"/api/v1/collectes/{collecte_id}/contributions", headers=auth_headers(seed["super_admin"]))
+    contribution = next(c for c in r.json() if c["id"] == contribution_id)
+    assert contribution["member_deceased"] is True
