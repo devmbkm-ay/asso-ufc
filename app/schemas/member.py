@@ -110,6 +110,15 @@ class PaginatedMembers(BaseModel):
     pages: int
 
 
+class MemberStatusCounts(BaseModel):
+    active:    int = 0
+    inactive:  int = 0
+    suspended: int = 0
+    honorary:  int = 0
+    pending:   int = 0
+    deceased:  int = 0
+
+
 # ── Invitations ───────────────────────────────────────────────────────────────
 
 class InviteCreate(BaseModel):

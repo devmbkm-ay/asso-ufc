@@ -13,7 +13,7 @@ from app.core.deps import CurrentMember, RequireAdmin, RequirePresidentOrAdmin, 
 from app.core.security import hash_password
 from app.core import email as email_svc
 from app.schemas.member import (
-    MemberCreate, MemberListItem, MemberRead,
+    MemberCreate, MemberListItem, MemberRead, MemberStatusCounts,
     MemberStatusUpdate, MemberUpdate, PaginatedMembers, RoleAssign,
 )
 
@@ -180,6 +180,27 @@ def list_members(
         size=size,
         pages=math.ceil(total / size) if total else 1,
     )
+
+
+@router.get("/status-counts", response_model=MemberStatusCounts,
+            summary="Décompte des membres par statut")
+def member_status_counts(
+    current_member: CurrentMember,
+    db: Session = Depends(get_db),
+    _=RequireSecretary,
+):
+    """
+    Rôles requis : super_admin, secrétaire, président — mêmes conditions
+    que l'accès à tous les statuts sur GET /members (un membre ordinaire
+    n'a pas besoin de connaître la répartition des statuts non-actifs).
+    Enregistrée avant /{member_id} pour éviter que FastAPI ne capture
+    "status-counts" comme un UUID de membre.
+    """
+    rows = db.query(Member.status, func.count(Member.id)).group_by(Member.status).all()
+    counts = {field: 0 for field in MemberStatusCounts.model_fields}
+    for member_status, count in rows:
+        counts[member_status] = count
+    return MemberStatusCounts(**counts)
 
 
 @router.post("", response_model=MemberRead, status_code=status.HTTP_201_CREATED,
