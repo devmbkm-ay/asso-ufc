@@ -32,6 +32,9 @@ services:
       SECRET_KEY:   ${SECRET_KEY:-changeme-dev-only}
       DEBUG:        ${DEBUG:-false}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      VAPID_PUBLIC_KEY:   ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY:  ${VAPID_PRIVATE_KEY:-}
+      VAPID_CLAIMS_EMAIL: ${VAPID_CLAIMS_EMAIL:-mailto:noreply@asso.fr}
     ports:
       - "8000:8000"
     volumes:

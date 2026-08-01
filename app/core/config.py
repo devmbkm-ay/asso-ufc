@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     REMINDER_DAY:  int = 5
     REMINDER_HOUR: int = 9
 
+    # Notifications push (VAPID) — clé publique envoyée au navigateur,
+    # clé privée utilisée pour signer les envois via pywebpush.
+    VAPID_PUBLIC_KEY:   str = ""
+    VAPID_PRIVATE_KEY:  str = ""
+    VAPID_CLAIMS_EMAIL: str = "mailto:noreply@asso.fr"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
