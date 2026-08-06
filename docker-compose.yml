@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"          # exposé localement pour inspecter avec DBeaver/TablePlus
+      - "127.0.0.1:5432:5432"   # bindé en local uniquement — jamais exposé publiquement (DBeaver/TablePlus via tunnel SSH)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-asso_user} -d ${POSTGRES_DB:-asso_db}"]
       interval: 5s
@@ -32,6 +32,9 @@ services:
       SECRET_KEY:   ${SECRET_KEY:-changeme-dev-only}
       DEBUG:        ${DEBUG:-false}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      BREVO_API_KEY:      ${BREVO_API_KEY:-}
+      EMAIL_FROM:         ${EMAIL_FROM:-noreply@asso.fr}
+      EMAIL_FROM_NAME:    ${EMAIL_FROM_NAME:-Association}
       VAPID_PUBLIC_KEY:   ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY:  ${VAPID_PRIVATE_KEY:-}
       VAPID_CLAIMS_EMAIL: ${VAPID_CLAIMS_EMAIL:-mailto:noreply@asso.fr}
