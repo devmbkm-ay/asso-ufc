@@ -34,7 +34,7 @@ class CollecteUpdate(BaseModel):
 
 class ContributionCreate(BaseModel):
     amount:       Decimal = Field(..., gt=0)
-    method:       str     = Field(..., pattern="^(cash|bank_transfer|lydia|sumeria|wero|other)$")
+    method:       str     = Field(..., pattern="^(cash|bank_transfer|lydia|sumeria|wero|paypal|other)$")
     is_anonymous: bool    = False
 
 
@@ -75,6 +75,8 @@ class ContributionRead(BaseModel):
     status:         str
     # Masqué (None) dans les mêmes conditions que member_id/member_name :
     # la référence encode les initiales, donc elle peut aussi révéler
-    # l'identité d'un contributeur anonyme.
+    # l'identité d'un contributeur anonyme. proof_url suit la même règle
+    # (voir _contribution_to_read).
     reference:      Optional[str] = None
+    proof_url:      Optional[str] = None
     contributed_at: datetime

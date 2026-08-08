@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, distinct
@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.core.database import get_db
 from app.core.deps import CurrentMember, RequireAdmin, RequireTreasurer
 from app.core.notifications import notify_member
+from app.core.uploads import save_uploaded_image
 from app.schemas.cotisation import (
     CotisationPlanCreate, CotisationPlanRead, CotisationPlanUpdate,
     MonthCell, PaginatedPayments, PaymentCreate, PaymentGridRow,
@@ -123,6 +124,7 @@ def _payment_to_read(p: Payment) -> PaymentRead:
         method=p.method.value,
         status=p.status.value,
         reference=p.reference,
+        proof_url=p.proof_url,
         notes=p.notes,
     )
 
@@ -380,6 +382,33 @@ def member_confirm_payment(
         raise HTTPException(status_code=404, detail="Paiement introuvable ou déjà traité")
 
     payment.status = PaymentStatus.declared
+
+    db.commit()
+    db.refresh(payment)
+    return _payment_to_read(payment)
+
+
+@router.post("/payments/{payment_id}/proof", response_model=PaymentRead,
+             summary="Membre joint une preuve de paiement (capture d'écran, reçu)")
+async def upload_payment_proof(
+    payment_id: UUID,
+    current_member: CurrentMember,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Optionnel — aide supplémentaire au trésorier en plus de la référence,
+    pas une condition pour déclarer un paiement.
+    """
+    payment = db.query(Payment).filter(
+        Payment.id == payment_id,
+        Payment.member_id == current_member.id,
+        Payment.status != PaymentStatus.cancelled,
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Paiement introuvable")
+
+    payment.proof_url = await save_uploaded_image(file)
 
     db.commit()
     db.refresh(payment)

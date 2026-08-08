@@ -62,6 +62,7 @@ class PaymentMethod(str, enum.Enum):
     lydia         = "lydia"
     sumeria       = "sumeria"
     wero          = "wero"
+    paypal        = "paypal"
     other         = "other"
 
 
@@ -189,6 +190,7 @@ class Payment(Base):
     method             = Column(Enum(PaymentMethod), nullable=False, default=PaymentMethod.cash)
     status             = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.confirmed, index=True)
     reference          = Column(String(200))
+    proof_url          = Column(String(500), nullable=True)
     recorded_by        = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
     notes              = Column(Text)
 
@@ -385,6 +387,7 @@ class Contribution(Base):
     method         = Column(Enum(PaymentMethod), nullable=False, default=PaymentMethod.other)
     status         = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.pending, index=True)
     reference      = Column(String(200))
+    proof_url      = Column(String(500), nullable=True)
     recorded_by    = Column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=True)
     contributed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

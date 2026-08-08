@@ -44,7 +44,7 @@ class PaymentCreate(BaseModel):
     payment_date:       date    = Field(default_factory=date.today)
     period_month:       Optional[int] = Field(None, ge=1, le=12)
     period_year:        int     = Field(..., ge=2000, le=2100)
-    method:             str     = Field("cash", pattern="^(cash|bank_transfer|lydia|sumeria|other)$")
+    method:             str     = Field("cash", pattern="^(cash|bank_transfer|lydia|sumeria|paypal|other)$")
     reference:          Optional[str] = Field(None, max_length=200)
     notes:              Optional[str] = None
 
@@ -69,6 +69,7 @@ class PaymentRead(BaseModel):
     method:             str
     status:             str
     reference:          Optional[str]
+    proof_url:          Optional[str] = None
     notes:              Optional[str]
 
     model_config = {"from_attributes": True}

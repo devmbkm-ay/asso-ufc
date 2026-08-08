@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import List
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.deps import CurrentMember, RequireAdmin, RequireSecretary
 from app.core.notifications import notify_member
 from app.core.reconciliation import generate_reference_code
+from app.core.uploads import save_uploaded_image
 from app.schemas.collecte import (
     CollecteCreate, CollecteUpdate, CollecteRead, ContributionCreate, ContributionRead,
 )
@@ -58,7 +59,9 @@ def _contribution_to_read(
     retrouvable via GET /members/{id} malgré le nom affiché "Membre anonyme".
     reference encode les initiales du contributeur, donc elle suit le même
     masquage — sinon une contribution "anonyme" révèle l'identité via sa
-    référence affichée à côté du montant public.
+    référence affichée à côté du montant public. proof_url suit la même
+    règle : une capture d'écran de virement contient souvent le nom du
+    contributeur.
     """
     reveal = (not contribution.is_anonymous) or is_admin or (member.id == current_member.id)
     return ContributionRead(
@@ -72,6 +75,7 @@ def _contribution_to_read(
         method=contribution.method.value,
         status=contribution.status.value,
         reference=contribution.reference if reveal else None,
+        proof_url=contribution.proof_url if reveal else None,
         contributed_at=contribution.contributed_at,
     )
 
@@ -351,6 +355,37 @@ def member_confirm_contribution(
             detail="Contribution introuvable ou déjà traitée",
         )
     contribution.status = PaymentStatus.declared
+    db.commit()
+    db.refresh(contribution)
+    return _contribution_to_read(contribution, current_member, current_member, is_admin=False)
+
+
+@router.post(
+    "/{collecte_id}/contributions/{contribution_id}/proof", response_model=ContributionRead,
+    summary="Membre joint une preuve de paiement (capture d'écran, reçu)",
+)
+async def upload_contribution_proof(
+    collecte_id: UUID,
+    contribution_id: UUID,
+    current_member: CurrentMember,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Optionnel — aide supplémentaire au trésorier en plus de la référence,
+    pas une condition pour déclarer une contribution.
+    """
+    contribution = db.query(Contribution).filter(
+        Contribution.id == contribution_id,
+        Contribution.collecte_id == collecte_id,
+        Contribution.member_id == current_member.id,
+        Contribution.status != PaymentStatus.cancelled,
+    ).first()
+    if not contribution:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contribution introuvable")
+
+    contribution.proof_url = await save_uploaded_image(file)
+
     db.commit()
     db.refresh(contribution)
     return _contribution_to_read(contribution, current_member, current_member, is_admin=False)

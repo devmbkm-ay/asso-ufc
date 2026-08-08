@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     VAPID_PRIVATE_KEY:  str = ""
     VAPID_CLAIMS_EMAIL: str = "mailto:noreply@asso.fr"
 
+    # Destinataire PayPal affiché aux membres (email ou lien paypal.me) —
+    # pas de compte associatif dédié pour l'instant, donc modifiable sans
+    # déploiement le jour où ça change. Vide = option PayPal masquée côté UI.
+    PAYPAL_RECIPIENT: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
